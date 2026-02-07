@@ -2,18 +2,24 @@ from flask import Blueprint, render_template, request, redirect, url_for, sessio
 from flask_login import login_user, logout_user, login_required
 from . import db
 from .__init__ import User
-import cloudinary as Cloud
-from cloudinary import uploader
-from cloudinary.utils import cloudinary_url
+import os
+import uuid
 
 auth = Blueprint('auth', __name__)
 
-# Add your cloudinary credentials here!
-Cloud.config( 
-  cloud_name = "", 
-  api_key = "", 
-  api_secret = "" 
-)
+
+# 本地图片上传函数
+def upload_image_local(file, upload_folder):
+    """保存图片到本地uploads文件夹"""
+    if not file or file.filename == '':
+        return None
+    # 生成唯一文件名
+    filename = f"{uuid.uuid4().hex}_{file.filename}"
+    file_path = os.path.join(upload_folder, filename)
+    file.save(file_path)
+    # 返回本地访问路径
+    return f"/uploads/{filename}"
+
 
 @auth.route('/signup', methods=['POST', 'GET'])
 def signup_post():
@@ -23,13 +29,12 @@ def signup_post():
         email = request.form.get('email')
         name = request.form.get('name')
         password = request.form.get('password')
-        image = request.files['image']
-        if image:
-            upload_result = uploader.upload(image)
-            # image = Cloud.CloudinaryImage(request.form.get('image'))
-            thumbnail_url1, options = cloudinary_url(
-                        upload_result['public_id'],
-                        crop="fill",)
+        image = request.files.get('image')
+        
+        # 本地上传图片
+        if image and image.filename != '':
+            from flask import current_app
+            thumbnail_url1 = upload_image_local(image, current_app.config['UPLOAD_FOLDER'])
         else:
             thumbnail_url1 = 'https://png.pngitem.com/pimgs/s/150-1503945_transparent-user-png-default-user-image-png-png.png'                
         
