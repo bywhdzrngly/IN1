@@ -95,6 +95,11 @@ def create_app():
     app.config['SECRET_KEY'] = 'xyzxyz xyzxyz xyzxyz'
     app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///db.sqlite'
     # app.config['SQLALCHEMY_DATABASE_URI'] = "sqlite:///:memory:"
+    
+    # 配置本地文件上传文件夹
+    UPLOAD_FOLDER = os.path.join(current_direc, 'uploads')
+    os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+    app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
     with app.app_context():
         # from .models import user
@@ -103,6 +108,12 @@ def create_app():
         login_manager.login_view = 'views.main_page'
         login_manager.init_app(app)
         db.create_all()
+        
+        # 注册 /uploads 路由来提供上传的文件
+        @app.route('/uploads/<filename>')
+        def uploaded_file(filename):
+            from flask import send_from_directory
+            return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
         @login_manager.user_loader
         def load_user(user_id):

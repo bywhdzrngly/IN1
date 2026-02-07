@@ -5,20 +5,11 @@ from flask_login import login_user, logout_user, login_required, current_user
 import random  
 import string
 from flask import Blueprint, render_template, session, redirect, request
-import cloudinary as Cloud
-from cloudinary import uploader
-from cloudinary.utils import cloudinary_url
+import os
 
 app = create_app()
 
 socketio = SocketIO(app,logger=True, engineio_logger=True)
-
-# Add your cloudinary credentials here!
-Cloud.config( 
-  cloud_name = "", 
-  api_key = "", 
-  api_secret = "" 
-)
 
 @socketio.on('sendimage')
 def sendimage(data):

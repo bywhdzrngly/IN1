@@ -3,16 +3,22 @@ views = Blueprint('views', __name__)
 from flask_login import login_user, logout_user, login_required, current_user
 from flask_socketio import SocketIO, send
 from .__init__ import User, Workspace,db, Channel,Chats
-import cloudinary as Cloud
-from cloudinary import uploader
-from cloudinary.utils import cloudinary_url
+import os
+import uuid
 
-# Add your cloudinary credentials here!
-Cloud.config( 
-  cloud_name = "", 
-  api_key = "", 
-  api_secret = "" 
-)
+
+# 本地图片上传函数
+def upload_image_local(file, upload_folder):
+    """保存图片到本地uploads文件夹"""
+    if not file or file.filename == '':
+        return None
+    # 生成唯一文件名
+    filename = f"{uuid.uuid4().hex}_{file.filename}"
+    file_path = os.path.join(upload_folder, filename)
+    file.save(file_path)
+    # 返回本地访问路径
+    return f"/uploads/{filename}"
+
 
 @views.route('/')
 def landing_page():
@@ -25,14 +31,12 @@ def main_page():
 @views.route('/imageUploadChat', methods=['POST'])
 @login_required
 def uploadImage():
-    image = request.files['image']
+    from flask import current_app
+    image = request.files.get('image')
     print("hello image here")
-    if image:
-        upload_result = uploader.upload(image)
-        # image = Cloud.CloudinaryImage(request.form.get('image'))
-        thumbnail_url1, options = cloudinary_url(
-                    upload_result['public_id'],
-                    crop="fill",)
+    if image and image.filename != '':
+        # 本地保存图片
+        thumbnail_url1 = upload_image_local(image, current_app.config['UPLOAD_FOLDER'])
         print(thumbnail_url1)
         c = Chats()
         c.message = thumbnail_url1
