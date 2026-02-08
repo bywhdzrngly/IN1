@@ -10,11 +10,15 @@ import os
 db = SQLAlchemy()
 
 # from . import db
+# SQLAlchemy = Python 操作数据库的高级工具
+# flask-login = 用户登录管理库，UserMixin：给 User 类加登录能力；LoginManager ：管理登录状态
+# werkzeug.security = 密码哈希工具，generate_password_hash：生成密码哈希；check_password_hash：验证密码哈希
+
 
 
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(80), index=True, unique=True)
+    name = db.Column(db.String(80), index=True, unique=True)# index=True：为该列创建索引，unique=True：确保该列的值唯一
     email = db.Column(db.String(80), index=True, unique=True)
     password_hash = db.Column(db.String(128))
     workspace_list = db.Column(db.String(100))
