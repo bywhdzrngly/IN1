@@ -1,16 +1,37 @@
+"""
+main.py 的核心职责：
+1.初始化 Flask 应用和 WebSocket 服务；
+2.定义所有 WebSocket 事件处理函数（比如发消息、创工作区、图片实时推送）；
+3.处理 404/405 错误页面；
+4.启动带 WebSocket 的 Flask 应用。
+"""
+
 from website import create_app,db,Workspace, User, Channel, Chats
 from flask_socketio import SocketIO, send, emit, join_room
+'''
+Flask-SocketIO 核心导入（实时通信关键）：
+SocketIO:创建 WebSocket 服务对象；
+send:简单发送消息（基础用法）；
+emit:精准发送事件（指定事件名、房间、是否广播）；
+join_room:让用户加入指定 “房间”(WebSocket 的房间机制，用于群聊 / 频道消息隔离）。
+'''
 from flask import session
+# session:Flask 的会话对象,用来存临时数据(比如当前登录用户、聊天房间名,关闭浏览器前有效);
 from flask_login import login_user, logout_user, login_required, current_user
 import random  
 import string
-from flask import Blueprint, render_template, session, redirect, request
-import os
+# random 和 string 模块用于生成随机字符串（比如工作区加入码）。
+from flask import render_template
 
 app = create_app()
 
 socketio = SocketIO(app,logger=True, engineio_logger=True)
+"""
+Flask-SocketIO 的核心配置：
+logger=True 和 engineio_logger=True 用于开启详细日志，方便调试 WebSocket 连接和事件。
+"""
 
+# 前端触发事件名 → 后端对应 @socketio.on('事件名') 函数处理 → 后端推送事件给前端
 @socketio.on('sendimage')
 def sendimage(data):
     print("hello")
