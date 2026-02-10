@@ -1,9 +1,9 @@
 # 聊天 App 的核心视图逻辑（处理页面跳转、图片上传、聊天数据展示）
-from flask import Blueprint, render_template, session, request, redirect, url_for
+from flask import Blueprint, render_template,  request,  jsonify
 views = Blueprint('views', __name__)
-from flask_login import login_user, logout_user, login_required, current_user
-from flask_socketio import SocketIO, send
-from .__init__ import User, Workspace,db, Channel,Chats
+from flask_login import  login_required, current_user
+from .__init__ import User, db, Conversation, Message, FriendRequest, Friendship
+from datetime import datetime
 import os
 import uuid
 
@@ -46,104 +46,239 @@ render_template("/views/landingPage.html")：
 def main_page():
     return render_template("/auth/login-register.html")
 
-@views.route('/imageUploadChat', methods=['POST'])
+
+@views.route('/conversation/<username>')
 @login_required
-def uploadImage():
+def get_or_create_conversation(username):
+    me = current_user.name
+    if username == me:
+        return jsonify({"error": "cannot chat with yourself"}), 400
+
+    target = User.query.filter_by(name=username).first()
+    if not target:
+        return jsonify({"error": "user not found"}), 404
+
+    user1, user2 = sorted([me, username])
+    is_friend = Friendship.query.filter_by(user1=user1, user2=user2).first()
+    if not is_friend:
+        return jsonify({"error": "not friends"}), 403
+    
+    conv = Conversation.query.filter_by(user1=user1, user2=user2).first()
+
+    if not conv:
+        conv = Conversation(user1=user1, user2=user2)
+        db.session.add(conv)
+        db.session.commit()
+
+    return jsonify(conv.getJsonData())
+
+
+@views.route('/message/send', methods=['POST'])
+@login_required
+def send_message():
+    data = request.get_json(silent=True) or {}
+    conversation_id = data.get('conversation_id')
+    content = (data.get('content') or '').strip()
+
+    if not conversation_id or not content:
+        return jsonify({"error": "missing conversation_id or content"}), 400
+
+    conv = Conversation.query.filter_by(id=conversation_id).first()
+    if not conv:
+        return jsonify({"error": "conversation not found"}), 404
+
+    if current_user.name not in (conv.user1, conv.user2):
+        return jsonify({"error": "forbidden"}), 403
+
+    user1, user2 = sorted([conv.user1, conv.user2])
+    is_friend = Friendship.query.filter_by(user1=user1, user2=user2).first()
+    if not is_friend:
+        return jsonify({"error": "not friends"}), 403
+    
+    msg = Message(
+        conversation_id=conversation_id,
+        sender=current_user.name,
+        content=content,
+        timestamp=datetime.utcnow(),
+    )
+    db.session.add(msg)
+    db.session.commit()
+
+    return jsonify(msg.getJsonData())
+
+@views.route('/message/upload', methods=['POST'])
+@login_required
+def upload_message_image():
     from flask import current_app
+
+    conversation_id = request.form.get('conversation_id')
+    if not conversation_id:
+        return jsonify({"error": "missing conversation_id"}), 400
+
+    conv = Conversation.query.filter_by(id=conversation_id).first()
+    if not conv:
+        return jsonify({"error": "conversation not found"}), 404
+
+    if current_user.name not in (conv.user1, conv.user2):
+        return jsonify({"error": "forbidden"}), 403
+
+    user1, user2 = sorted([conv.user1, conv.user2])
+    is_friend = Friendship.query.filter_by(user1=user1, user2=user2).first()
+    if not is_friend:
+        return jsonify({"error": "not friends"}), 403
+
     image = request.files.get('image')
-    print("hello image here")
-    if image and image.filename != '':
-        # 本地保存图片
-        thumbnail_url1 = upload_image_local(image, current_app.config['UPLOAD_FOLDER'])
-        print(thumbnail_url1)
-        c = Chats()
-        c.message = thumbnail_url1
-        c.username = request.form.get('imageusername')
-        c.wid = request.form.get('imagewid')
-        c.channel_id = request.form.get('imagecid')
-        c.image = 1
-        room = Workspace.query.filter_by(id = request.form.get('imagewid')).first()
-        session['name'] = room.name
-        if c.message and c.username and c.wid and c.channel_id:
-            db.session.add(c)
-            db.session.commit()
-            if Chats.query.filter_by(message = thumbnail_url1).count() == 1:
-                image = Chats.query.filter_by(message = thumbnail_url1).first()
-                session['imageid'] = image.id
-    return redirect(url_for('views.chat'))
+    if not image or image.filename == '':
+        return jsonify({"error": "missing image"}), 400
+
+    image_url = upload_image_local(image, current_app.config['UPLOAD_FOLDER'])
+    if not image_url:
+        return jsonify({"error": "upload failed"}), 500
+
+    msg = Message(
+        conversation_id=conversation_id,
+        sender=current_user.name,
+        content=image_url,
+        timestamp=datetime.utcnow(),
+    )
+    db.session.add(msg)
+    db.session.commit()
+
+    return jsonify(msg.getJsonData())
+
+@views.route('/messages/<int:conversation_id>')
+@login_required
+def get_messages(conversation_id):
+    conv = Conversation.query.filter_by(id=conversation_id).first()
+    if not conv:
+        return jsonify({"error": "conversation not found"}), 404
+
+    if current_user.name not in (conv.user1, conv.user2):
+        return jsonify({"error": "forbidden"}), 403
+
+    msgs = Message.query.filter_by(
+        conversation_id=conversation_id
+    ).order_by(Message.timestamp).all()
+
+    return jsonify([m.getJsonData() for m in msgs])
+
+@views.route('/friends', methods=['GET'])
+@login_required
+def list_friends():
+    me = current_user.name
+    friendships = Friendship.query.filter(
+        (Friendship.user1 == me) | (Friendship.user2 == me)
+    ).all()
+
+    friends = []
+    for f in friendships:
+        friend_name = f.user2 if f.user1 == me else f.user1
+        friends.append(friend_name)
+
+    return jsonify({"friends": friends})
 
 
-@views.route('/chat')
-@login_required  # 必须登录才能访问聊天页
-def chat():
-    # 1. 初始化变量：存放工作区、频道数量等
-    Workspaces = []  # 用户的所有工作区
-    ChannelCount = 0  # 第一个工作区的频道数量
-    count = 0  # 用户的工作区数量
-    
-    # 2. 获取当前登录用户名（兼容session和flask_login两种方式）
-    if session.get("USERNAME") is None:
-        username = current_user.name  # 从flask_login的当前用户获取
-    else:
-        username = session['username']  # 从session获取
-    
-    # 3. 从数据库查当前用户对象
-    user = User.query.filter_by(name = username).first()
-    
-    # 4. 如果用户有工作区列表，解析并加载所有工作区
-    if user.workspace_list:
-        # workspace_list是字符串（比如"1 2 3"），拆分成列表并转成整数
-        wlist = user.workspace_list.split()
-        wlist = [int(i) for i in wlist]
-        count = len(wlist)  # 工作区数量
-        
-        # 遍历工作区ID，查询并添加到Workspaces列表
-        for w in wlist:
-            Workspaces.append(Workspace.query.filter_by(id = w).first())
-    
-    print(username)  # 调试用：打印当前用户名
-    chatscount = 0  # 第一个频道的消息数量
-    
-    # 5. 如果用户有工作区，加载第一个工作区的频道和消息
-    if len(Workspaces) > 0:
-        # 查第一个工作区的所有频道
-        Channels = Channel.query.filter_by(wid = Workspaces[0].id).all()
-        print(Workspaces[0].id)  # 调试用：打印第一个工作区ID
-        # 统计第一个工作区的频道数量
-        ChannelCount = Channel.query.filter_by(wid = Workspaces[0].id).count()
-        print(Channels)  # 调试用：打印频道列表
-        
-        # 6. 如果有频道，加载第一个频道的所有聊天记录
-        if ChannelCount > 0:
-            chats = Chats.query.filter_by(wid = Workspaces[0].id, channel_id = Channels[0].id).all()
-            chatscount = len(chats)  # 消息数量
-            print(chatscount, "chatscount")  # 调试用：打印消息数量
-            
-            # 7. 渲染聊天页，传入所有数据（前端模板用这些数据显示内容）
-            return render_template('/views/base.html', 
-                                   workspace = Workspaces, 
-                                   count = count, 
-                                   channels = Channels, 
-                                   channelCount = ChannelCount,
-                                   username = username, 
-                                   chats= chats, 
-                                   chatscount = chatscount, 
-                                   image = user.image)
-    
-    # 8. 如果没有工作区/频道，仍渲染聊天页（只是数据为空）
-    return render_template('/views/base.html', 
-                           workspace = Workspaces, 
-                           count = count, 
-                           channelCount = ChannelCount, 
-                           username = username, 
-                           chatscount = chatscount, 
-                           image = user.image)
+@views.route('/friend/request', methods=['POST'])
+@login_required
+def send_friend_request():
+    data = request.get_json(silent=True) or {}
+    to_user = data.get('to_user')
 
-"""
-核心逻辑：
-先获取当前登录用户，加载该用户的所有「工作区」（比如聊天空间）；
-优先加载第一个工作区的所有「频道」（聊天房间）；
-再加载第一个频道的所有「聊天记录」（文字 / 图片消息）；
-把所有数据传给 base.html 模板，前端根据这些数据渲染聊天界面（显示工作区、频道、历史消息）；
-如果用户没有任何工作区 / 频道，也会返回聊天页，只是页面上没有数据（空界面）。
-"""
+    if not to_user:
+        return jsonify({"error": "missing to_user"}), 400
+    if to_user == current_user.name:
+        return jsonify({"error": "cannot add yourself"}), 400
+    if User.query.filter_by(name=to_user).first() is None:
+        return jsonify({"error": "user not found"}), 404
+
+    user1, user2 = sorted([current_user.name, to_user])
+    if Friendship.query.filter_by(user1=user1, user2=user2).first():
+        return jsonify({"error": "already friends"}), 400
+
+    exists = FriendRequest.query.filter_by(
+        from_user=current_user.name, to_user=to_user, status="pending"
+    ).first()
+    if exists:
+        return jsonify({"error": "request already sent"}), 400
+
+    req = FriendRequest(
+        from_user=current_user.name,
+        to_user=to_user,
+        status="pending",
+        timestamp=datetime.utcnow(),
+    )
+    db.session.add(req)
+    db.session.commit()
+    return jsonify(req.getJsonData())
+
+
+@views.route('/friend/requests', methods=['GET'])
+@login_required
+def list_friend_requests():
+    me = current_user.name
+    reqs = FriendRequest.query.filter_by(to_user=me, status="pending").all()
+    return jsonify([r.getJsonData() for r in reqs])
+
+
+@views.route('/friend/accept', methods=['POST'])
+@login_required
+def accept_friend_request():
+    data = request.get_json(silent=True) or {}
+    request_id = data.get('request_id')
+    if not request_id:
+        return jsonify({"error": "missing request_id"}), 400
+
+    req = FriendRequest.query.filter_by(id=request_id, to_user=current_user.name).first()
+    if not req or req.status != "pending":
+        return jsonify({"error": "request not found"}), 404
+
+    user1, user2 = sorted([req.from_user, req.to_user])
+    if not Friendship.query.filter_by(user1=user1, user2=user2).first():
+        f = Friendship(user1=user1, user2=user2, timestamp=datetime.utcnow())
+        db.session.add(f)
+
+    req.status = "accepted"
+    db.session.commit()
+    return jsonify({"status": "accepted"})
+
+
+@views.route('/friend/reject', methods=['POST'])
+@login_required
+def reject_friend_request():
+    data = request.get_json(silent=True) or {}
+    request_id = data.get('request_id')
+    if not request_id:
+        return jsonify({"error": "missing request_id"}), 400
+
+    req = FriendRequest.query.filter_by(id=request_id, to_user=current_user.name).first()
+    if not req or req.status != "pending":
+        return jsonify({"error": "request not found"}), 404
+
+    req.status = "rejected"
+    db.session.commit()
+    return jsonify({"status": "rejected"})
+
+
+@views.route('/friend/delete', methods=['POST'])
+@login_required
+def delete_friend():
+    data = request.get_json(silent=True) or {}
+    friend = data.get('friend')
+    if not friend:
+        return jsonify({"error": "missing friend"}), 400
+
+    user1, user2 = sorted([current_user.name, friend])
+    f = Friendship.query.filter_by(user1=user1, user2=user2).first()
+    if not f:
+        return jsonify({"error": "not friends"}), 404
+
+    db.session.delete(f)
+    db.session.commit()
+    return jsonify({"status": "deleted"})
+
+@views.route('/users', methods=['GET'])
+@login_required
+def list_all_users():
+    me = current_user.name
+    users = User.query.filter(User.name != me).all()
+    return jsonify([{"name": u.name, "email": u.email, "image": u.image} for u in users])

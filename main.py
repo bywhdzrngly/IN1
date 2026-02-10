@@ -6,7 +6,8 @@ main.py 的核心职责：
 4.启动带 WebSocket 的 Flask 应用。
 """
 
-from website import create_app,db,Workspace, User, Channel, Chats
+from website import create_app, db,  User, Conversation, Message, Friendship
+from datetime import datetime
 from flask_socketio import SocketIO, send, emit, join_room
 '''
 Flask-SocketIO 核心导入（实时通信关键）：
@@ -26,187 +27,141 @@ from flask import render_template
 app = create_app()
 
 socketio = SocketIO(app,logger=True, engineio_logger=True)
+
+def _conversation_room(conversation_id):
+    return f"conversation_{conversation_id}"
+
 """
 Flask-SocketIO 的核心配置：
 logger=True 和 engineio_logger=True 用于开启详细日志，方便调试 WebSocket 连接和事件。
 """
 
 # 前端触发事件名 → 后端对应 @socketio.on('事件名') 函数处理 → 后端推送事件给前端
-@socketio.on('sendimage')
-def sendimage(data):
-    print("hello")
-    if Chats.query.filter_by(id = session['imageid']).count() == 1:
-        i = Chats.query.filter_by(id = session['imageid']).first()
-        c = Chats.query.filter_by(message = i.message).first()
-        session['imageid'] = -1
-        data = {
-            'id': c.id,
-            'message': c.message,
-            'username': c.username,
-            'wid':c.wid,
-            'channel_id': c.channel_id,
-            'image': 1
-        }
-        room = Workspace.query.filter_by(id = c.wid).first()
-        join_room(room.name)
-        emit('receiveMessage', data, broadcast= True, room=room.name)
-        # emit('receiveimage', data, room = session['name'] )
 
-@socketio.on('message')
-def handle_message(data):
-    print(data)
-    if session.get("USERNAME") is None:
-        username = current_user.name
-    else:
-        username = session['username']
-    user = User.query.filter_by(name = username).first()
-    if user.workspace_list:
-        wlist = user.workspace_list.split()
-        wid = int(wlist[0])
-        room = Workspace.query.filter_by(id = wid).first()
-        join_room(room.name)
-    send({"msg": data['data'], "wid":"1", "channel_d":"2"})
+@socketio.on('joinConversation')
+def join_conversation(data):
+    if not current_user.is_authenticated:
+        return
 
-@socketio.on('createWorkspace')
-def handle_createWorkspace(data):
-    print(data)
-    w = Workspace()
-    w.admin_username = data['username']
-    w.name = data['name']
-    joining_code = random_string(4,2)
-    w.joining_code = joining_code
-    db.session.add(w)
-    db.session.commit()
-    room = Workspace.query.filter_by(name = data['name']).first()
-    user = User.query.filter_by(name = data['username']).first()
-    if user.workspace_list:
-        user.workspace_list = user.workspace_list + str(room.id) + " "
-    else:
-        user.workspace_list = str(room.id) +" "
-    db.session.commit()
-    print("hello",user.workspace_list)
-    join_room(room.name)
-    data = {
-        "name":data['name'],
-        "admin_username": data['username'],
-        "id": room.id, 
-        "joining_code": joining_code,
-    }
-    emit('createWorkspaceJS',data, broadcast=True)
+    conversation_id = data.get('conversation_id')
+    if not conversation_id:
+        return
 
-@socketio.on('createChannel')
-def handle_createChannel(data):
-    c = Channel()
-    c.admin_username = data['username']
-    c.name = data['name']
-    c.wid = data['wid']
-    room = Workspace.query.filter_by(id = data['wid']).first()
-    db.session.add(c)
-    db.session.commit()
-    channel = Channel.query.filter_by(name = data['name']).first()
-    data = {
-        "name":data['name'],
-        "admin_username": data['username'],
-        "id": channel.id,
-        "wid":data['wid'],
-    }
-    emit('createChannelJS',data, room=room.name, broadcast= True)
+    conv = Conversation.query.filter_by(id=conversation_id).first()
+    if not conv:
+        return
 
-@socketio.on('join')
-def joinRoom(data):
-    if (data['wid']):
-        room = Workspace.query.filter_by(id = data['wid']).first()
-        join_room(room.name)
-    elif (data['name']):
-        join_room(data['name'])   
+    username = current_user.name if session.get("USERNAME") is None else session['username']
+    if username not in (conv.user1, conv.user2):
+        return
 
-@socketio.on('getChannels')
-def sendChannels(data):
-    wid = data['wid']
-    room = Workspace.query.filter_by(id = wid).first()
-    Channels = Channel.query.filter_by(wid = wid).all()
-    ch = []
-    ChannelCount = Channel.query.filter_by(wid = wid).count()
-    i = 0
-    for c in Channels:
-        ch.append({i:{
-            'id': c.id,
-            'name': c.name,
-            'admin_username': c.admin_username,
-            'wid':c.wid
-        }})
-        i = i + 1
-    emit('getChannelsJS', {"channels":ch, "channelCount":ChannelCount, "name":room.name})
+    join_room(_conversation_room(conversation_id))
 
-@socketio.on('getWorkspaceName')
-def get_workspaceName(data):
-    wid = data['wid']
-    print(wid)
-    room = Workspace.query.filter_by(id = wid).first()
-    print("hello",room.joining_code)
-    emit('changeWorkspaceName', {"name":room.name, "joining_id" :room.joining_code})
 
-@socketio.on('chatmsg')
-def chat_msg(data):
-    c = Chats()
-    c.message = data['msg']
-    c.username = data['username']
-    c.wid = data['wid']
-    c.channel_id = data['channel_id']
-    c.image = 0
-    data['image'] = 0
-    db.session.add(c)
-    db.session.commit()
-    print(c)
-    wid = data['wid']
-    room = Workspace.query.filter_by(id = wid).first()
-    join_room(room.name)
-    emit('receiveMessage', data, broadcast= True, room=room.name)
+@socketio.on('conversationMessage')
+def conversation_message(data):
+    if not current_user.is_authenticated:
+        return
 
-@socketio.on('getMessages')
-def sendMessages(data):
-    chats = Chats.query.filter_by(wid = data['wid'], channel_id = data['channel_id']).all()
-    channel = Channel.query.filter_by(id = data['channel_id']).first()
-    chatscount = len(chats)
-    i = 0
-    ch = []
-    wid = data['wid']
-    room = Workspace.query.filter_by(id = wid).first()
-    join_room(room.name)
-    for c in chats:
-        ch.append({i:{
-            'id': c.id,
-            'message': c.message,
-            'username': c.username,
-            'wid':c.wid,
-            'channel_id': c.channel_id,
-            'image':c.image
-        }})
-        i = i + 1
-    emit('receiveMessageJS', {"chats":ch, "channel_id":data['channel_id'], "name":channel.name}, broadcast= True, room=room.name)
+    conversation_id = data.get('conversation_id')
+    content = (data.get('content') or '').strip()
 
-@socketio.on('joinWorkspace')
-def addWorkspace(data):
-    user = User.query.filter_by(name = data['username']).first()
-    if Workspace.query.filter_by(name = data['name'], joining_code=data['code']).count() == 1:
-        join_room(data['name'])
-        if user.workspace_list:
-            room = Workspace.query.filter_by(name = data['name'],).first()
-            join_room(room.name)
-            wlist = user.workspace_list.split()
-            wlist = [int(i) for i in wlist]
-            wid = room.id
-            if wid in wlist:
-                emit('error', {"msg":"You have already joined the workspace!", "username":data['username']}, room = room.name)
-            else:
-                user.workspace_list = user.workspace_list + str(room.id) + " "
-                emit('workspaceJoined', {"wid": room.id, "username":data['username'], "name": room.name,}, room = room.name)
-        else:
-            room = Workspace.query.filter_by(name = data['name'],).first()
-            user.workspace_list = str(room.id) +" "
-            emit('workspaceJoined', {"wid": room.id, "name": room.name, "username":data['username']}, room = room.name)
+    if not conversation_id or not content:
+        return
+
+    conv = Conversation.query.filter_by(id=conversation_id).first()
+    if not conv:
+        return
+
+    username = current_user.name if session.get("USERNAME") is None else session['username']
+    if username not in (conv.user1, conv.user2):
+        return
+    
+    user1, user2 = sorted([conv.user1, conv.user2])
+    is_friend = Friendship.query.filter_by(user1=user1, user2=user2).first()
+    if not is_friend:
+        return
+
+    msg = Message(
+        conversation_id=conversation_id,
+        sender=username,
+        content=content,
+        timestamp=datetime.utcnow(),
+    )
+    db.session.add(msg)
     db.session.commit()
 
+    payload = msg.getJsonData()
+    join_room(_conversation_room(conversation_id))
+    emit('receiveConversationMessage', payload, room=_conversation_room(conversation_id), broadcast=True)
+
+
+@socketio.on('getConversationMessages')
+def get_conversation_messages(data):
+    if not current_user.is_authenticated:
+        return
+    
+    conversation_id = data.get('conversation_id')
+    if not conversation_id:
+        return
+
+    conv = Conversation.query.filter_by(id=conversation_id).first()
+    if not conv:
+        return
+
+    username = current_user.name if session.get("USERNAME") is None else session['username']
+    if username not in (conv.user1, conv.user2):
+        return
+
+    msgs = Message.query.filter_by(
+        conversation_id=conversation_id
+    ).order_by(Message.timestamp).all()
+
+    join_room(_conversation_room(conversation_id))
+    emit(
+        'receiveConversationMessages',
+        {"conversation_id": conversation_id, "messages": [m.getJsonData() for m in msgs]},
+        room=_conversation_room(conversation_id),
+        broadcast=True,
+    )
+
+@socketio.on('conversationImage')
+def conversation_image(data):
+    if not current_user.is_authenticated:
+        return
+
+    conversation_id = data.get('conversation_id')
+    image_url = (data.get('image_url') or '').strip()
+
+    if not conversation_id or not image_url:
+        return
+
+    conv = Conversation.query.filter_by(id=conversation_id).first()
+    if not conv:
+        return
+
+    username = current_user.name if session.get("USERNAME") is None else session['username']
+    if username not in (conv.user1, conv.user2):
+        return
+
+    user1, user2 = sorted([conv.user1, conv.user2])
+    is_friend = Friendship.query.filter_by(user1=user1, user2=user2).first()
+    if not is_friend:
+        return
+
+    msg = Message(
+        conversation_id=conversation_id,
+        sender=username,
+        content=image_url,
+        timestamp=datetime.utcnow(),
+    )
+    db.session.add(msg)
+    db.session.commit()
+
+    payload = msg.getJsonData()
+    join_room(_conversation_room(conversation_id))
+    emit('receiveConversationMessage', payload, room=_conversation_room(conversation_id), broadcast=True)
+    
 def random_string(letter_count, digit_count):  
     str1 = ''.join((random.choice(string.ascii_letters) for x in range(letter_count)))  
     str1 += ''.join((random.choice(string.digits) for x in range(digit_count)))  
