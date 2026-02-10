@@ -10,14 +10,17 @@ import os
 db = SQLAlchemy()
 
 # from . import db
+# SQLAlchemy = Python 操作数据库的高级工具
+# flask-login = 用户登录管理库，UserMixin：给 User 类加登录能力；LoginManager ：管理登录状态
+# werkzeug.security = 密码哈希工具，generate_password_hash：生成密码哈希；check_password_hash：验证密码哈希
+
 
 
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(80), index=True, unique=True)
+    name = db.Column(db.String(80), index=True, unique=True)# index=True：为该列创建索引，unique=True：确保该列的值唯一
     email = db.Column(db.String(80), index=True, unique=True)
     password_hash = db.Column(db.String(128))
-    workspace_list = db.Column(db.String(100))
     image = db.Column(db.String(256))
 
     def set_password(self, password):
@@ -28,61 +31,77 @@ class User(UserMixin, db.Model):
 
     def getJsonData(self):
         return {
-            "username": self.username,
             "name": self.name,
             "email": self.email,
         }
 
 
-class Workspace(db.Model):
-
+    
+class Conversation(db.Model):
+    __table_args__ = (
+        db.UniqueConstraint('user1', 'user2', name='uq_conversation_users'),
+    )
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(80), index=True)
-    admin_username = db.Column(db.String(80), index=True)
-
-    joining_code = db.Column(db.String(10))
+    user1 = db.Column(db.String(80), index=True)
+    user2 = db.Column(db.String(80), index=True)
 
     def getJsonData(self):
         return {
             "id": self.id,
-            "name": self.name,
-            "admin_username": self.admin_username,
-            "joining_code": self.joining_code,
+            "user1": self.user1,
+            "user2": self.user2,
         }
 
 
-class Channel(db.Model):
-
+class Message(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(80), index=True)
-    admin_username = db.Column(db.String(80), index=True)
-    wid = db.Column(db.Integer, index=True)
+    conversation_id = db.Column(db.Integer, index=True)
+    sender = db.Column(db.String(80), index=True)
+    content = db.Column(db.String(500))
+    timestamp = db.Column(db.DateTime, index=True)
 
     def getJsonData(self):
         return {
             "id": self.id,
-            "name": self.name,
-            "admin_username": self.admin_username,
-            "workspace_id": self.wid,
+            "conversation_id": self.conversation_id,
+            "sender": self.sender,
+            "content": self.content,
+            "timestamp": self.timestamp.isoformat() if self.timestamp else None,
+        }
+
+class FriendRequest(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    from_user = db.Column(db.String(80), index=True)
+    to_user = db.Column(db.String(80), index=True)
+    status = db.Column(db.String(20), index=True)  # pending/accepted/rejected
+    timestamp = db.Column(db.DateTime, index=True)
+
+    def getJsonData(self):
+        return {
+            "id": self.id,
+            "from_user": self.from_user,
+            "to_user": self.to_user,
+            "status": self.status,
+            "timestamp": self.timestamp.isoformat() if self.timestamp else None,
         }
 
 
-class Chats(db.Model):
-
+class Friendship(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    message = db.Column(db.String(80), index=True)
-    username = db.Column(db.String(80), index=True)
-    wid = db.Column(db.Integer, index=True)
-    channel_id = db.Column(db.Integer, index=True)
-    image = db.Column(db.Integer)
+    user1 = db.Column(db.String(80), index=True)
+    user2 = db.Column(db.String(80), index=True)
+    timestamp = db.Column(db.DateTime, index=True)
+
+    __table_args__ = (
+        db.UniqueConstraint('user1', 'user2', name='uq_friendship_users'),
+    )
 
     def getJsonData(self):
         return {
             "id": self.id,
-            "message": self.message,
-            "username": self.username,
-            "wid": self.wid,
-            "channel_id": self.channel_id,
+            "user1": self.user1,
+            "user2": self.user2,
+            "timestamp": self.timestamp.isoformat() if self.timestamp else None,
         }
 
 
