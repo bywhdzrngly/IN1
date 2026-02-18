@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>聊天应用</title>
+    <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+    <div id="app">
+        <!-- 登录/注册页面 -->
+        <div id="auth-page" class="page hidden">
+            <div class="auth-container">
+                <div class="auth-card">
+                    <h1>聊天应用</h1>
+                    
+                    <!-- 登录表单 -->
+                    <form id="login-form" class="auth-form active">
+                        <h2>登录</h2>
+                        <div class="form-group">
+                            <label>用户名</label>
+                            <input type="text" id="login-name" placeholder="输入用户名" required>
+                        </div>
+                        <div class="form-group">
+                            <label>密码</label>
+                            <input type="password" id="login-password" placeholder="输入密码" required>
+                        </div>
+                        <div class="form-group checkbox">
+                            <input type="checkbox" id="login-remember">
+                            <label for="login-remember">记住我</label>
+                        </div>
+                        <button type="submit" class="btn btn-primary">登录</button>
+                        <p class="form-switch">没有账号？<a href="#" onclick="switchAuthForm(event)">去注册</a></p>
+                    </form>
+                    
+                    <!-- 注册表单 -->
+                    <form id="signup-form" class="auth-form">
+                        <h2>注册</h2>
+                        <div class="form-group">
+                            <label>用户名</label>
+                            <input type="text" id="signup-name" placeholder="输入用户名" required>
+                        </div>
+                        <div class="form-group">
+                            <label>邮箱</label>
+                            <input type="email" id="signup-email" placeholder="输入邮箱" required>
+                        </div>
+                        <div class="form-group">
+                            <label>密码</label>
+                            <input type="password" id="signup-password" placeholder="输入密码" required>
+                        </div>
+                        <div class="form-group">
+                            <label>头像（可选）</label>
+                            <input type="file" id="signup-image" accept="image/*">
+                            <small>支持 jpg、png 等常见格式</small>
+                        </div>
+                        <div id="signup-error" class="error-message"></div>
+                        <button type="submit" class="btn btn-primary">注册</button>
+                        <p class="form-switch">已有账号？<a href="#" onclick="switchAuthForm(event)">去登录</a></p>
+                    </form>
+                    
+                    <div id="auth-error" class="error-message"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 主聊天页面 -->
+        <div id="main-page" class="page hidden">
+            <div class="main-container">
+                <!-- 左侧栏：用户信息 + 好友列表 -->
+                <div class="sidebar">
+                    <!-- 用户信息栏 -->
+                    <div class="user-info">
+                        <img id="user-avatar" src="" alt="头像" class="avatar">
+                        <div class="user-details">
+                            <div id="user-name" class="username"></div>
+                            <div id="user-email" class="email"></div>
+                        </div>
+                        <button id="logout-btn" class="btn-logout" title="登出">⏻</button>
+                    </div>
+
+                    <!-- 搜索框 -->
+                    <div class="search-box">
+                        <input 
+                            type="text" 
+                            id="search-input" 
+                            placeholder="搜索用户..."
+                            class="search-input"
+                        >
+                    </div>
+
+                    <!-- 标签切换 -->
+                    <div class="tabs">
+                        <button class="tab-btn active" data-tab="friends">好友</button>
+                        <button class="tab-btn" data-tab="requests">
+                            申请
+                            <span id="request-badge" class="badge hidden">0</span>
+                        </button>
+                        <button class="tab-btn" data-tab="search">搜索</button>
+                    </div>
+
+                    <!-- 好友列表 -->
+                    <div id="friends-tab" class="tab-content active">
+                        <div id="friends-list" class="friends-list">
+                            <div class="empty-state">暂无好友</div>
+                        </div>
+                    </div>
+
+                    <!-- 待审核申请 -->
+                    <div id="requests-tab" class="tab-content">
+                        <div id="requests-list" class="requests-list">
+                            <div class="empty-state">暂无待审核申请</div>
+                        </div>
+                    </div>
+
+                    <!-- 搜索结果 -->
+                    <div id="search-tab" class="tab-content">
+                        <div id="search-results" class="search-results">
+                            <div class="empty-state">输入用户名搜索</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 右侧：聊天区 -->
+                <div class="chat-area">
+                    <!-- 聊天头部 -->
+                    <div id="chat-header" class="chat-header hidden">
+                        <div class="chat-header-info">
+                            <img id="chat-friend-avatar" src="" alt="头像" class="avatar-small">
+                            <div>
+                                <div id="chat-friend-name" class="chat-friend-name"></div>
+                                <div id="chat-status" class="chat-status">离线</div>
+                            </div>
+                        </div>
+                        <button id="delete-friend-btn" class="btn btn-danger btn-small">删除好友</button>
+                    </div>
+
+                    <!-- 消息列表 -->
+                    <div id="messages-container" class="messages-container">
+                        <div class="empty-state">选择好友开始聊天</div>
+                    </div>
+
+                    <!-- 输入区 -->
+                    <div id="input-area" class="input-area hidden">
+                        <div class="input-toolbar">
+                            <button id="image-btn" class="btn-icon" title="发送图片">
+                                <span>🖼️</span>
+                            </button>
+                            <input type="file" id="image-input" accept="image/*" style="display: none;">
+                        </div>
+                        <div class="input-group">
+                            <textarea 
+                                id="message-input" 
+                                class="message-input" 
+                                placeholder="输入消息... (Enter 发送, Shift+Enter 换行)"
+                                rows="3"
+                            ></textarea>
+                            <button id="send-btn" class="btn btn-primary">发送</button>
+                        </div>
+                        <div id="upload-progress" class="upload-progress hidden">
+                            <div class="progress-bar">
+                                <div class="progress-fill"></div>
+                            </div>
+                            <span>上传中...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 全局加载指示器 -->
+        <div id="loading-indicator" class="loading-indicator hidden">
+            <div class="spinner"></div>
+        </div>
+
+        <!-- 全局错误提示 -->
+        <div id="error-toast" class="error-toast hidden"></div>
+    </div>
+
+    <!-- 引入依赖 -->
+    <script src="https://cdn.socket.io/4.5.4/socket.io.js"></script>
+    
+    <!-- 引入应用脚本 -->
+    <script src="../js/state.js"></script>
+    <script src="../js/api.js"></script>
+    <script src="../js/socket.js"></script>
+    <script src="../js/auth.js"></script>
+    <script src="../js/friends.js"></script>
+    <script src="../js/chat.js"></script>
+    <script src="../js/main.js"></script>
+</body>
+</html>
