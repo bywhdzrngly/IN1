@@ -12,7 +12,7 @@ const SocketManager = {
             return;
         }
 
-        const socket = io('http://localhost:5000', {
+        const socket = io(window.location.origin, {
             withCredentials: true,
             reconnection: true,
             reconnectionDelay: 1000,

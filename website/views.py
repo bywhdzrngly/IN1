@@ -1,19 +1,12 @@
 # 聊天 App 的核心视图逻辑（处理页面跳转、图片上传、聊天数据展示）
-from flask import Blueprint, request, jsonify, current_app
-views = Blueprint('views', __name__)
-from flask_login import  login_required, current_user
+from flask import Blueprint, request, jsonify, current_app, render_template
+from flask_login import login_required, current_user
 from .__init__ import User, db, Conversation, Message, FriendRequest, Friendship
 from datetime import datetime
 import os
 import uuid
 
-from flask import render_template, Blueprint
-
 views = Blueprint("views", __name__)
-
-@views.route("/")
-def home():
-    return render_template("index.html")
 
 '''
 路由(Route)本质是"URL 地址"与"后端处理函数"的映射关系,Flask 通过装饰器 @app.route() 来定义路由。比如 @app.route('/chat') 就是把 /chat 地址和 chat() 函数关联起来,当用户访问 /chat 时,就会执行 chat() 函数里的代码。
@@ -43,7 +36,7 @@ def upload_image_local(file, upload_folder):
 
 @views.route('/')#定义根路由（访问 http://127.0.0.1:5000/ 时触发）
 def landing_page():
-    return current_app.send_static_file('html/index.html')
+    return render_template('index.html')
 '''
 到时候改前端需要改
 render_template("/views/landingPage.html")：
@@ -52,7 +45,7 @@ render_template("/views/landingPage.html")：
 
 @views.route('/authorization')
 def main_page():
-    return current_app.send_static_file('html/index.html')
+    return render_template('index.html')
 
 
 @views.route('/user', methods=['GET'])
