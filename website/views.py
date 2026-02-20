@@ -7,6 +7,14 @@ from datetime import datetime
 import os
 import uuid
 
+from flask import render_template, Blueprint
+
+views = Blueprint("views", __name__)
+
+@views.route("/")
+def home():
+    return render_template("index.html")
+
 '''
 路由(Route)本质是"URL 地址"与"后端处理函数"的映射关系,Flask 通过装饰器 @app.route() 来定义路由。比如 @app.route('/chat') 就是把 /chat 地址和 chat() 函数关联起来,当用户访问 /chat 时,就会执行 chat() 函数里的代码。
 Blueprint:Flask 的"蓝图",用来拆分项目路由(把不同功能的路由分开管理,比如登录、聊天、上传各用一个蓝图);

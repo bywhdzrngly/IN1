@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>聊天应用</title>
-    <link rel="stylesheet" href="../css/style.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
     <div id="app">
@@ -180,12 +180,12 @@
     <script src="https://cdn.socket.io/4.5.4/socket.io.js"></script>
     
     <!-- 引入应用脚本 -->
-    <script src="../js/state.js"></script>
-    <script src="../js/api.js"></script>
-    <script src="../js/socket.js"></script>
-    <script src="../js/auth.js"></script>
-    <script src="../js/friend.js"></script>
-    <script src="../js/chat.js"></script>
-    <script src="../js/main.js"></script>
+    <script src="{{ url_for('static', filename='js/state.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/api.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/socket.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/auth.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/friend.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/chat.js') }}"></script>
 </body>
 </html>
