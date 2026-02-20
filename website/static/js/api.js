@@ -5,7 +5,7 @@
 
 const API = {
     // 基础 URL
-    baseURL: 'http://localhost:5000',
+    baseURL: window.location.origin,
 
     /**
      * 发送请求的通用方法
