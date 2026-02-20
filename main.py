@@ -16,7 +16,7 @@ send:简单发送消息（基础用法）；
 emit:精准发送事件（指定事件名、房间、是否广播）；
 join_room:让用户加入指定 “房间”(WebSocket 的房间机制，用于群聊 / 频道消息隔离）。
 '''
-from flask import session
+from flask import session, request
 # session:Flask 的会话对象,用来存临时数据(比如当前登录用户、聊天房间名,关闭浏览器前有效);
 from flask_login import login_user, logout_user, login_required, current_user
 import random  
@@ -30,6 +30,20 @@ socketio = SocketIO(app,logger=True, engineio_logger=True)
 
 def _conversation_room(conversation_id):
     return f"conversation_{conversation_id}"
+
+
+def _user_room(username):
+    return f"user_{username}"
+
+
+@socketio.on('connect')
+def handle_connect():
+    if not current_user.is_authenticated:
+        return
+
+    username = current_user.name if session.get("USERNAME") is None else session['username']
+    if username:
+        join_room(_user_room(username))
 
 """
 Flask-SocketIO 的核心配置：

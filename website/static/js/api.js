@@ -11,18 +11,21 @@ const API = {
      * 发送请求的通用方法
      */
     async request(method, endpoint, data = null, options = {}) {
+        const { silent = false, ...requestOptions } = options;
         try {
-            State.setLoading(true);
+            if (!silent) {
+                State.setLoading(true);
+            }
             
             const url = `${this.baseURL}${endpoint}`;
             const config = {
                 method,
                 headers: {
                     'Content-Type': 'application/json',
-                    ...options.headers,
+                    ...requestOptions.headers,
                 },
                 credentials: 'include', // 包含 cookie
-                ...options,
+                ...requestOptions,
             };
 
             if (data) {
@@ -53,10 +56,14 @@ const API = {
         } catch (error) {
             console.error('API 错误:', error);
             State.setError(error.message);
-            showErrorToast(error.message);
+            if (!silent) {
+                showErrorToast(error.message);
+            }
             throw error;
         } finally {
-            State.setLoading(false);
+            if (!silent) {
+                State.setLoading(false);
+            }
         }
     },
 
@@ -128,15 +135,15 @@ const API = {
     /**
      * 获取好友列表
      */
-    async getFriends() {
-        return this.request('GET', '/friends');
+    async getFriends(options = {}) {
+        return this.request('GET', '/friends', null, options);
     },
 
     /**
      * 获取好友申请列表
      */
-    async getFriendRequests() {
-        return this.request('GET', '/friend/requests');
+    async getFriendRequests(options = {}) {
+        return this.request('GET', '/friend/requests', null, options);
     },
 
     /**

@@ -35,6 +35,28 @@ function updateLoadingIndicator() {
     }
 }
 
+async function syncFriendsAndRequests() {
+    if (!State.currentUser || !State.currentUser.name) {
+        return;
+    }
+
+    try {
+        const [friendsData, requests] = await Promise.all([
+            API.getFriends({ silent: true }),
+            API.getFriendRequests({ silent: true }),
+        ]);
+
+        State.setFriends((friendsData && friendsData.friends) || []);
+        State.setFriendRequests(requests || []);
+
+        FriendsModule.renderFriendsList();
+        FriendsModule.renderRequestsList();
+        updateRequestBadge();
+    } catch (error) {
+        console.warn('自动同步好友数据失败:', error);
+    }
+}
+
 function bootstrapApp() {
     showAuthPage();
 
@@ -56,3 +78,4 @@ document.addEventListener('DOMContentLoaded', bootstrapApp);
 window.showAuthPage = showAuthPage;
 window.showMainPage = showMainPage;
 window.showErrorToast = showErrorToast;
+window.syncFriendsAndRequests = syncFriendsAndRequests;
