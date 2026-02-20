@@ -78,7 +78,7 @@ const AuthModule = {
         }
 
         if (password.length < 6) {
-            this.showSignupError('密码长���至少 6 个字符');
+            this.showSignupError('密码长度至少 6 个字符');
             return;
         }
 
@@ -145,8 +145,8 @@ const AuthModule = {
             this.displayUserInfo(userInfo);
 
             // 获取好友列表
-            const friends = await API.getFriends();
-            State.setFriends(friends);
+            const friendsData = await API.getFriends();
+            State.setFriends(friendsData.friends || []);
 
             // 获取好友申请
             const requests = await API.getFriendRequests();

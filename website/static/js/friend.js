@@ -8,17 +8,14 @@ const FriendsModule = {
      * 初始化好友模块
      */
     init() {
-        // 标签页切换
         document.querySelectorAll('.tab-btn').forEach(btn => {
             btn.addEventListener('click', (e) => this.switchTab(e));
         });
 
-        // 搜索框
         document.getElementById('search-input').addEventListener('input', (e) => {
             this.handleSearch(e);
         });
 
-        // 删除好友按钮
         document.getElementById('delete-friend-btn').addEventListener('click', () => {
             this.handleDeleteFriend();
         });
@@ -36,13 +33,11 @@ const FriendsModule = {
 
         const tabName = tabBtn.dataset.tab;
 
-        // 更新按钮状态
         document.querySelectorAll('.tab-btn').forEach(btn => {
             btn.classList.remove('active');
         });
         tabBtn.classList.add('active');
 
-        // 显示对应内容
         document.querySelectorAll('.tab-content').forEach(content => {
             content.classList.remove('active');
         });
@@ -68,9 +63,8 @@ const FriendsModule = {
             return;
         }
 
-        // 过滤用户（排除自己和已是好友的）
         const results = State.allUsers.filter(user => {
-            if (user.name.toLowerCase().includes(query)) {
+            if ((user.name || '').toLowerCase().includes(query)) {
                 const isSelf = user.name === State.currentUser.name;
                 const isFriend = State.friends.some(f => f.name === user.name);
                 const hasPending = State.friendRequests.some(r => r.from_user === user.name);
@@ -98,13 +92,12 @@ const FriendsModule = {
             <div class="friend-item ${State.selectedFriendName === friend.name ? 'active' : ''}" data-friend="${friend.name}">
                 <img src="${friend.image || this.getDefaultAvatar()}" alt="头像" class="friend-avatar">
                 <div class="friend-info">
-                    <div class="friend-name">${this.escapeHtml(friend.name)}</div>
-                    <div class="friend-time">${friend.email || ''}</div>
+                    <div class="friend-name">${this.escapeHtml(friend.name || '')}</div>
+                    <div class="friend-time">${this.escapeHtml(friend.email || '')}</div>
                 </div>
             </div>
         `).join('');
 
-        // 添加点击事件
         friendsList.querySelectorAll('.friend-item').forEach(item => {
             item.addEventListener('click', () => {
                 const friendName = item.dataset.friend;
@@ -128,7 +121,7 @@ const FriendsModule = {
             <div class="request-item" data-request-id="${request.id}">
                 <img src="${request.from_user_image || this.getDefaultAvatar()}" alt="头像">
                 <div class="request-info">
-                    <div class="request-name">${this.escapeHtml(request.from_user)}</div>
+                    <div class="request-name">${this.escapeHtml(request.from_user || '')}</div>
                 </div>
                 <div class="request-actions">
                     <button class="btn btn-primary btn-small btn-accept" data-request-id="${request.id}">同意</button>
@@ -137,17 +130,16 @@ const FriendsModule = {
             </div>
         `).join('');
 
-        // 添加按钮事件
         requestsList.querySelectorAll('.btn-accept').forEach(btn => {
             btn.addEventListener('click', () => {
-                const requestId = parseInt(btn.dataset.requestId);
+                const requestId = parseInt(btn.dataset.requestId, 10);
                 this.handleAcceptRequest(requestId);
             });
         });
 
         requestsList.querySelectorAll('.btn-reject').forEach(btn => {
             btn.addEventListener('click', () => {
-                const requestId = parseInt(btn.dataset.requestId);
+                const requestId = parseInt(btn.dataset.requestId, 10);
                 this.handleRejectRequest(requestId);
             });
         });
@@ -173,13 +165,12 @@ const FriendsModule = {
             <div class="search-result-item" data-user="${user.name}">
                 <img src="${user.image || this.getDefaultAvatar()}" alt="头像">
                 <div class="search-result-info">
-                    <div class="search-result-name">${this.escapeHtml(user.name)}</div>
+                    <div class="search-result-name">${this.escapeHtml(user.name || '')}</div>
                 </div>
                 <button class="btn btn-add-friend" data-user="${user.name}">+ 加好友</button>
             </div>
         `).join('');
 
-        // 添加按钮事件
         searchResults.querySelectorAll('.btn-add-friend').forEach(btn => {
             btn.addEventListener('click', () => {
                 const username = btn.dataset.user;
@@ -195,10 +186,9 @@ const FriendsModule = {
         try {
             State.setLoading(true);
             await API.sendFriendRequest(toUser);
-            
+
             showErrorToast(`已向 ${toUser} 发送好友申请`);
 
-            // 更新搜索结果
             State.setSearchResults(
                 State.searchResults.filter(u => u.name !== toUser)
             );
@@ -220,20 +210,16 @@ const FriendsModule = {
 
             showErrorToast('已同意申请');
 
-            // 移除申请
             const request = State.friendRequests.find(r => r.id === requestId);
             if (request) {
-                // 添加到好友列表
                 State.addFriend({
                     name: request.from_user,
                     email: request.from_user_email || '',
                     image: request.from_user_image || '',
                 });
 
-                // 移除申请
                 State.removeFriendRequest(requestId);
 
-                // 重新渲染
                 this.renderFriendsList();
                 this.renderRequestsList();
                 updateRequestBadge();
@@ -255,7 +241,6 @@ const FriendsModule = {
 
             showErrorToast('已拒绝申请');
 
-            // 移除申请
             State.removeFriendRequest(requestId);
             this.renderRequestsList();
             updateRequestBadge();
@@ -282,12 +267,11 @@ const FriendsModule = {
 
             showErrorToast('好友已删除');
 
-            // 从状态中移除好友
             State.removeFriend(State.selectedFriendName);
             State.selectedFriendName = null;
 
-            // 重新渲染
             this.renderFriendsList();
+            ChatModule.resetChatPanel();
         } catch (error) {
             showErrorToast('删除好友失败: ' + error.message);
         } finally {
@@ -313,45 +297,22 @@ const FriendsModule = {
             '"': '&quot;',
             "'": '&#039;',
         };
-        return text.replace(/[&<>"']/g, function(m) { return map[m]; });
+        return String(text).replace(/[&<>"']/g, function(m) { return map[m]; });
     },
 };
 
-// 暴露模块
 window.FriendsModule = FriendsModule;
 
-// 初始化模块
-document.addEventListener('DOMContentLoaded', () => {
-    FriendsModule.init();
-});
-
-// 更新好友请求徽章
+/**
+ * 更新好友申请徽章
+ */
 function updateRequestBadge() {
-    const badge = document.getElementById('requests-badge');
+    const badge = document.getElementById('request-badge');
     const count = State.friendRequests.length;
     if (count > 0) {
         badge.textContent = count;
-        badge.style.display = 'inline-block';
+        badge.classList.remove('hidden');
     } else {
-        badge.style.display = 'none';
+        badge.classList.add('hidden');
     }
-}
-
-// 显示错误提示
-function showErrorToast(message) {
-    const toast = document.createElement('div');
-    toast.className = 'toast';
-    toast.textContent = message;
-    document.body.appendChild(toast);
-
-    setTimeout(() => {
-        toast.classList.add('show');
-    }, 100);
-
-    setTimeout(() => {
-        toast.classList.remove('show');
-        setTimeout(() => {
-            document.body.removeChild(toast);
-        }, 300);
-    }, 3000);
 }
