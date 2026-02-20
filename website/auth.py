@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, redirect, url_for, session
+from flask import Blueprint, request, redirect, url_for, session, jsonify
 # Blueprint:一个功能模块;render_template:渲染html模板;request:获取请求数据;redirect:重定向;url_for:生成URL;session:会话对象;
 from flask_login import login_user, logout_user, login_required
 from . import db
@@ -27,7 +27,6 @@ def upload_image_local(file, upload_folder):
 @auth.route('/signup', methods=['POST', 'GET'])
 def signup_post():
     if request.method == 'POST':
-        error = None
         thumbnail_url1 = None
         email = request.form.get('email')
         name = request.form.get('name')
@@ -42,16 +41,13 @@ def signup_post():
             thumbnail_url1 = 'https://png.pngitem.com/pimgs/s/150-1503945_transparent-user-png-default-user-image-png-png.png'                
         
         if not password or not email or not name:
-            error = "Invalid Credentials. Please try again."
-            return render_template("/auth/login-register.html", error=error)
+            return jsonify({"error": "Invalid Credentials. Please try again."}), 400
 
         if User.query.filter_by(name=name).count() == 1:
-            error = "Name already taken. Please try again."
-            return render_template("/auth/login-register.html", error=error)
+            return jsonify({"error": "Name already taken. Please try again."}), 400
 
         if User.query.filter_by(email=email).count() == 1:
-            error = "Email already taken. Please try again."
-            return render_template("/auth/login-register.html", error=error)
+            return jsonify({"error": "Email already taken. Please try again."}), 400
 
         u = User()
         u.name = name
@@ -62,35 +58,50 @@ def signup_post():
         db.session.add(u)
         db.session.commit()
 
-        return render_template("/auth/login-register.html")
+        return jsonify({
+            "status": "ok",
+            "user": {
+                "id": u.id,
+                "name": u.name,
+                "email": u.email,
+                "image": u.image,
+            }
+        })
     else:
-        return render_template("/auth/login-register.html")
+        return redirect(url_for('views.landing_page'))
 
 
 @auth.route('/login', methods=['POST'])
 def login_post():
-    error = None
     name = request.form.get('name')
     password = request.form.get('password')
     remember = True if request.form.get('remember') else False
 
     if not name or not password:
-        error = "Missing Data"
-        return render_template("/auth/login-register.html", error=error)
+        return jsonify({"error": "Missing Data"}), 400
 
     user = User.query.filter_by(name=name).first()
     if user is None or not user.check_password(password):
-        error = "Please check your login details and try again."
-        return render_template("/auth/login-register.html", error=error)
+        return jsonify({"error": "Please check your login details and try again."}), 401
 
     session.pop('username', None)
     login_user(user, remember=remember)
-    return redirect(url_for('views.chat'))
+    return jsonify({
+        "status": "ok",
+        "user": {
+            "id": user.id,
+            "name": user.name,
+            "email": user.email,
+            "image": user.image,
+        }
+    })
 
 
-@auth.route('/logout')
+@auth.route('/logout', methods=['GET', 'POST'])
 @login_required
 def logout():
     logout_user()
     session.pop('name', None)
-    return render_template('/auth/login-register.html')
+    if request.method == 'POST':
+        return jsonify({"status": "ok"})
+    return redirect(url_for('views.landing_page'))

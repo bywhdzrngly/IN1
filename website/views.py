@@ -1,5 +1,5 @@
 # 聊天 App 的核心视图逻辑（处理页面跳转、图片上传、聊天数据展示）
-from flask import Blueprint, render_template,  request,  jsonify
+from flask import Blueprint, request, jsonify, current_app
 views = Blueprint('views', __name__)
 from flask_login import  login_required, current_user
 from .__init__ import User, db, Conversation, Message, FriendRequest, Friendship
@@ -35,7 +35,7 @@ def upload_image_local(file, upload_folder):
 
 @views.route('/')#定义根路由（访问 http://127.0.0.1:5000/ 时触发）
 def landing_page():
-    return render_template("/views/landingPage.html")
+    return current_app.send_static_file('html/index.html')
 '''
 到时候改前端需要改
 render_template("/views/landingPage.html")：
@@ -44,7 +44,18 @@ render_template("/views/landingPage.html")：
 
 @views.route('/authorization')
 def main_page():
-    return render_template("/auth/login-register.html")
+    return current_app.send_static_file('html/index.html')
+
+
+@views.route('/user', methods=['GET'])
+@login_required
+def get_current_user():
+    return jsonify({
+        "id": current_user.id,
+        "name": current_user.name,
+        "email": current_user.email,
+        "image": current_user.image,
+    })
 
 
 @views.route('/conversation/<username>')
@@ -173,7 +184,12 @@ def list_friends():
     friends = []
     for f in friendships:
         friend_name = f.user2 if f.user1 == me else f.user1
-        friends.append(friend_name)
+        friend_user = User.query.filter_by(name=friend_name).first()
+        friends.append({
+            "name": friend_name,
+            "email": friend_user.email if friend_user else "",
+            "image": friend_user.image if friend_user else "",
+        })
 
     return jsonify({"friends": friends})
 
@@ -217,7 +233,14 @@ def send_friend_request():
 def list_friend_requests():
     me = current_user.name
     reqs = FriendRequest.query.filter_by(to_user=me, status="pending").all()
-    return jsonify([r.getJsonData() for r in reqs])
+    payload = []
+    for r in reqs:
+        from_user = User.query.filter_by(name=r.from_user).first()
+        item = r.getJsonData()
+        item["from_user_email"] = from_user.email if from_user else ""
+        item["from_user_image"] = from_user.image if from_user else ""
+        payload.append(item)
+    return jsonify(payload)
 
 
 @views.route('/friend/accept', methods=['POST'])

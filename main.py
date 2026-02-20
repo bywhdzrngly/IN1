@@ -22,7 +22,7 @@ from flask_login import login_user, logout_user, login_required, current_user
 import random  
 import string
 # random 和 string 模块用于生成随机字符串（比如工作区加入码）。
-from flask import render_template
+from flask import jsonify
 
 app = create_app()
 
@@ -172,16 +172,13 @@ def random_string(letter_count, digit_count):
     return final_string 
 
 @app.errorhandler(405)
-  
-# inbuilt function which takes error as parameter
-def not_found(e):
-  return render_template("/views/404.html")
+def method_not_allowed(e):
+        return jsonify({"error": "method not allowed"}), 405
+
 
 @app.errorhandler(404)
-  
-# inbuilt function which takes error as parameter
 def not_found(e):
-  return render_template("/views/404.html")
+        return jsonify({"error": "not found"}), 404
 
 
 if __name__ == '__main__':
