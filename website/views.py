@@ -72,6 +72,22 @@ def get_current_user():
     })
 
 
+@views.route('/user/avatar', methods=['POST'])
+@login_required
+def update_avatar():
+    image = request.files.get('image')
+    if not image or image.filename == '':
+        return jsonify({"error": "missing image"}), 400
+
+    image_url = upload_image_local(image, current_app.config['UPLOAD_FOLDER'])
+    if not image_url:
+        return jsonify({"error": "upload failed"}), 500
+
+    current_user.image = image_url
+    db.session.commit()
+
+    return jsonify({"status": "ok", "image": image_url})
+
 @views.route('/conversation/<username>')
 @login_required
 def get_or_create_conversation(username):
