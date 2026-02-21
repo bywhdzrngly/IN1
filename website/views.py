@@ -101,10 +101,24 @@ def update_avatar():
     if not image_url:
         return jsonify({"error": "upload failed"}), 500
 
-    current_user.image = image_url
-    db.session.commit()
+    # 重新查询当前用户，确保使用当前会话中的对象
+    user = User.query.get(current_user.id)
+    if not user:
+        return jsonify({"error": "user not found"}), 404
 
-    return jsonify({"status": "ok", "image": image_url})
+    user.image = image_url
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"Database commit error: {e}")
+        return jsonify({"error": "database error"}), 500
+
+    # 返回新 URL 并再次查询确认
+    return jsonify({
+        "status": "ok",
+        "image": image_url
+    })
 
 @views.route('/conversation/<username>')
 @login_required
@@ -117,7 +131,7 @@ def get_or_create_conversation(username):
     if not target:
         return jsonify({"error": "user not found"}), 404
 
-    # 获取友谊记录（按 ID 排序）
+    # 获取记录（按 ID 排序）
     user1_id = min(me.id, target.id)
     user2_id = max(me.id, target.id)
     friendship = Friendship.query.filter_by(user1_id=user1_id, user2_id=user2_id).first()
@@ -137,7 +151,6 @@ def get_or_create_conversation(username):
         db.session.add(conv)
         db.session.commit()
 
-    # 构造头像映射（键为用户 ID 字符串，便于前端使用）
     avatar_map = {
         str(me.id): {
             "global": me.image,
@@ -149,8 +162,7 @@ def get_or_create_conversation(username):
         }
     }
 
-    # 获取对话的基础数据
-    conversation_data = conv.getJsonData()  # 返回包含 id, user1, user2, timestamp 等
+    conversation_data = conv.getJsonData()
     conversation_data['avatar_map'] = avatar_map
 
     return jsonify(conversation_data)
@@ -215,8 +227,16 @@ def upload_message_image():
     if current_user.name not in (conv.user1, conv.user2):
         return jsonify({"error": "forbidden"}), 403
 
-    user1, user2 = sorted([conv.user1, conv.user2])
-    is_friend = Friendship.query.filter_by(user1=user1, user2=user2).first()
+    # 获取对话双方的用户对象（用于后续查询友谊）
+    user1 = User.query.filter_by(name=conv.user1).first()
+    user2 = User.query.filter_by(name=conv.user2).first()
+    if not user1 or not user2:
+        return jsonify({"error": "invalid conversation participants"}), 500
+
+    # 使用 ID 检查友谊
+    user1_id = min(user1.id, user2.id)
+    user2_id = max(user1.id, user2.id)
+    is_friend = Friendship.query.filter_by(user1_id=user1_id, user2_id=user2_id).first()
     if not is_friend:
         return jsonify({"error": "not friends"}), 403
 
