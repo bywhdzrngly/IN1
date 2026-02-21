@@ -46,6 +46,24 @@ def upload_image_local(file, upload_folder):
     # 返回本地访问路径
     return f"/uploads/{filename}"
 
+def get_display_avatar(sender_id, friendship):
+    """
+    根据发送者ID和友谊对象返回要显示的头像URL。
+    优先返回专属头像，否则返回发送者的全局头像。
+    """
+    if sender_id == friendship.user1_id:
+        avatar = friendship.image_by_user1
+    elif sender_id == friendship.user2_id:
+        avatar = friendship.image_by_user2
+    else:
+        return None  # 发送者不在友谊中
+
+    if avatar:
+        return avatar
+
+    # 回退到全局头像
+    sender = User.query.get(sender_id)
+    return sender.image if sender else None
 
 @views.route('/')#定义根路由（访问 http://127.0.0.1:5000/ 时触发）
 def landing_page():
@@ -91,27 +109,51 @@ def update_avatar():
 @views.route('/conversation/<username>')
 @login_required
 def get_or_create_conversation(username):
-    me = current_user.name
-    if username == me:
+    me = current_user
+    if username == me.name:
         return jsonify({"error": "cannot chat with yourself"}), 400
 
     target = User.query.filter_by(name=username).first()
     if not target:
         return jsonify({"error": "user not found"}), 404
 
-    user1, user2 = sorted([me, username])
-    is_friend = Friendship.query.filter_by(user1=user1, user2=user2).first()
-    if not is_friend:
+    # 获取友谊记录（按 ID 排序）
+    user1_id = min(me.id, target.id)
+    user2_id = max(me.id, target.id)
+    friendship = Friendship.query.filter_by(user1_id=user1_id, user2_id=user2_id).first()
+    if not friendship:
         return jsonify({"error": "not friends"}), 403
-    
-    conv = Conversation.query.filter_by(user1=user1, user2=user2).first()
 
+    # 确定对话中 user1/user2 的顺序：ID 小的为 user1
+    if me.id < target.id:
+        conv_user1, conv_user2 = me.name, target.name
+    else:
+        conv_user1, conv_user2 = target.name, me.name
+
+    # 获取或创建对话
+    conv = Conversation.query.filter_by(user1=conv_user1, user2=conv_user2).first()
     if not conv:
-        conv = Conversation(user1=user1, user2=user2)
+        conv = Conversation(user1=conv_user1, user2=conv_user2)
         db.session.add(conv)
         db.session.commit()
 
-    return jsonify(conv.getJsonData())
+    # 构造头像映射（键为用户 ID 字符串，便于前端使用）
+    avatar_map = {
+        str(me.id): {
+            "global": me.image,
+            "special": friendship.image_by_user1 if me.id == friendship.user1_id else friendship.image_by_user2
+        },
+        str(target.id): {
+            "global": target.image,
+            "special": friendship.image_by_user2 if me.id == friendship.user1_id else friendship.image_by_user1
+        }
+    }
+
+    # 获取对话的基础数据
+    conversation_data = conv.getJsonData()  # 返回包含 id, user1, user2, timestamp 等
+    conversation_data['avatar_map'] = avatar_map
+
+    return jsonify(conversation_data)
 
 
 @views.route('/message/send', methods=['POST'])
@@ -128,20 +170,30 @@ def send_message():
     if not conv:
         return jsonify({"error": "conversation not found"}), 404
 
+    # 检查当前用户是否参与对话（用用户名）
     if current_user.name not in (conv.user1, conv.user2):
         return jsonify({"error": "forbidden"}), 403
 
-    user1, user2 = sorted([conv.user1, conv.user2])
-    is_friend = Friendship.query.filter_by(user1=user1, user2=user2).first()
+    # 获取对话双方的 User 对象
+    user1 = User.query.filter_by(name=conv.user1).first()
+    user2 = User.query.filter_by(name=conv.user2).first()
+    if not user1 or not user2:
+        return jsonify({"error": "conversation participants invalid"}), 500
+
+    # 检查是否仍是好友（用 ID）
+    user1_id = min(user1.id, user2.id)
+    user2_id = max(user1.id, user2.id)
+    is_friend = Friendship.query.filter_by(user1_id=user1_id, user2_id=user2_id).first()
     if not is_friend:
         return jsonify({"error": "not friends"}), 403
-    
+
     msg = Message(
         conversation_id=conversation_id,
-        sender=current_user.name,
+        sender=current_user.name,   # 仍用用户名
         content=content,
         timestamp=datetime.utcnow(),
     )
+
     db.session.add(msg)
     db.session.commit()
 
@@ -206,19 +258,19 @@ def get_messages(conversation_id):
 @views.route('/friends', methods=['GET'])
 @login_required
 def list_friends():
-    me = current_user.name
+    me = current_user
     friendships = Friendship.query.filter(
-        (Friendship.user1 == me) | (Friendship.user2 == me)
+        (Friendship.user1_id == me.id) | (Friendship.user2_id == me.id)
     ).all()
 
     friends = []
     for f in friendships:
-        friend_name = f.user2 if f.user1 == me else f.user1
-        friend_user = User.query.filter_by(name=friend_name).first()
+        friend_user = f.user2 if f.user1_id == me.id else f.user1
         friends.append({
-            "name": friend_name,
-            "email": friend_user.email if friend_user else "",
-            "image": friend_user.image if friend_user else "",
+            "id": friend_user.id,
+            "name": friend_user.name,
+            "email": friend_user.email,
+            "image": friend_user.image,
         })
 
     return jsonify({"friends": friends})
@@ -234,13 +286,18 @@ def send_friend_request():
         return jsonify({"error": "missing to_user"}), 400
     if to_user == current_user.name:
         return jsonify({"error": "cannot add yourself"}), 400
-    if User.query.filter_by(name=to_user).first() is None:
+
+    target = User.query.filter_by(name=to_user).first()
+    if not target:
         return jsonify({"error": "user not found"}), 404
 
-    user1, user2 = sorted([current_user.name, to_user])
-    if Friendship.query.filter_by(user1=user1, user2=user2).first():
+    # 检查是否已是好友
+    user1_id = min(current_user.id, target.id)
+    user2_id = max(current_user.id, target.id)
+    if Friendship.query.filter_by(user1_id=user1_id, user2_id=user2_id).first():
         return jsonify({"error": "already friends"}), 400
 
+    # 后续代码不变（FriendRequest 仍用用户名）
     exists = FriendRequest.query.filter_by(
         from_user=current_user.name, to_user=to_user, status="pending"
     ).first()
@@ -287,9 +344,16 @@ def accept_friend_request():
     if not req or req.status != "pending":
         return jsonify({"error": "request not found"}), 404
 
-    user1, user2 = sorted([req.from_user, req.to_user])
-    if not Friendship.query.filter_by(user1=user1, user2=user2).first():
-        f = Friendship(user1=user1, user2=user2, timestamp=datetime.utcnow())
+    from_user = User.query.filter_by(name=req.from_user).first()
+    to_user = User.query.filter_by(name=req.to_user).first()
+    if not from_user or not to_user:
+        return jsonify({"error": "user not found"}), 404
+
+    # 用 ID 创建友谊
+    user1_id = min(from_user.id, to_user.id)
+    user2_id = max(from_user.id, to_user.id)
+    if not Friendship.query.filter_by(user1_id=user1_id, user2_id=user2_id).first():
+        f = Friendship(user1_id=user1_id, user2_id=user2_id, timestamp=datetime.utcnow())
         db.session.add(f)
 
     req.status = "accepted"
@@ -324,15 +388,54 @@ def delete_friend():
     if not friend:
         return jsonify({"error": "missing friend"}), 400
 
-    user1, user2 = sorted([current_user.name, friend])
-    f = Friendship.query.filter_by(user1=user1, user2=user2).first()
+    target = User.query.filter_by(name=friend).first()
+    if not target:
+        return jsonify({"error": "user not found"}), 404
+
+    user1_id = min(current_user.id, target.id)
+    user2_id = max(current_user.id, target.id)
+    f = Friendship.query.filter_by(user1_id=user1_id, user2_id=user2_id).first()
     if not f:
         return jsonify({"error": "not friends"}), 404
 
     db.session.delete(f)
     db.session.commit()
-    _emit_friend_data_changed(user1, user2)
+    _emit_friend_data_changed(current_user.name, friend)
     return jsonify({"status": "deleted"})
+
+@views.route('/friend/set_avatar', methods=['POST'])
+@login_required
+def set_friend_avatar():
+    friend_name = request.form.get('friend')
+    image = request.files.get('image')
+
+    if not friend_name or not image:
+        return jsonify({"error": "Missing friend or image"}), 400
+
+    target = User.query.filter_by(name=friend_name).first()
+    if not target:
+        return jsonify({"error": "User not found"}), 404
+
+    # 使用 ID 查询友谊记录
+    user1_id = min(current_user.id, target.id)
+    user2_id = max(current_user.id, target.id)
+    friendship = Friendship.query.filter_by(user1_id=user1_id, user2_id=user2_id).first()
+    if not friendship:
+        return jsonify({"error": "Not friends"}), 403
+
+    from flask import current_app
+    image_url = upload_image_local(image, current_app.config['UPLOAD_FOLDER'])
+    if not image_url:
+        return jsonify({"error": "Upload failed"}), 500
+
+    # 根据当前用户 ID 存入对应字段
+    if current_user.id == friendship.user1_id:
+        friendship.image_by_user1 = image_url
+    else:
+        friendship.image_by_user2 = image_url
+
+    db.session.commit()
+    return jsonify({"status": "ok", "image_url": image_url})
 
 @views.route('/users', methods=['GET'])
 @login_required
