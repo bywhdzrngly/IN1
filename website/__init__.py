@@ -88,20 +88,30 @@ class FriendRequest(db.Model):
 
 class Friendship(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    user1 = db.Column(db.String(80), index=True)
-    user2 = db.Column(db.String(80), index=True)
+    user1_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+    user2_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
     timestamp = db.Column(db.DateTime, index=True)
+    image_by_user1 = db.Column(db.String(256), nullable=True)  # user1 设置的专属头像
+    image_by_user2 = db.Column(db.String(256), nullable=True)  # user2 设置的专属头像
+
+    # 关联 User 对象，便于获取用户名等信息
+    user1 = db.relationship('User', foreign_keys=[user1_id])
+    user2 = db.relationship('User', foreign_keys=[user2_id])
 
     __table_args__ = (
-        db.UniqueConstraint('user1', 'user2', name='uq_friendship_users'),
+        db.UniqueConstraint('user1_id', 'user2_id', name='uq_friendship_users'),
     )
 
     def getJsonData(self):
         return {
             "id": self.id,
-            "user1": self.user1,
-            "user2": self.user2,
+            "user1_id": self.user1_id,
+            "user2_id": self.user2_id,
+            "user1_name": self.user1.name if self.user1 else None,
+            "user2_name": self.user2.name if self.user2 else None,
             "timestamp": self.timestamp.isoformat() if self.timestamp else None,
+            "image_by_user1": self.image_by_user1,
+            "image_by_user2": self.image_by_user2,
         }
 
 
