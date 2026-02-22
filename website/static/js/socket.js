@@ -40,6 +40,12 @@ const SocketManager = {
             this.handleReceiveHistoryMessages(data);
         });
 
+        socket.on('friendDataChanged', () => {
+            if (typeof window.syncFriendsAndRequests === 'function') {
+                window.syncFriendsAndRequests();
+            }
+        });
+
         socket.on('error', (error) => {
             console.error('Socket 错误:', error);
             showErrorToast('连接出错: ' + error);
@@ -112,6 +118,10 @@ const SocketManager = {
      * 处理连接事件
      */
     handleConnect() {
+        if (typeof window.syncFriendsAndRequests === 'function') {
+            window.syncFriendsAndRequests();
+        }
+
         // 重新加入之前的会话
         if (State.currentConversationId) {
             this.joinConversation(State.currentConversationId);

@@ -8,6 +8,19 @@ import uuid
 
 views = Blueprint("views", __name__)
 
+
+def _user_room(username):
+    return f"user_{username}"
+
+
+def _emit_friend_data_changed(*usernames):
+    socketio = current_app.extensions.get('socketio')
+    if not socketio:
+        return
+
+    for username in set(u for u in usernames if u):
+        socketio.emit('friendDataChanged', {'username': username}, room=_user_room(username))
+
 '''
 路由(Route)本质是"URL 地址"与"后端处理函数"的映射关系,Flask 通过装饰器 @app.route() 来定义路由。比如 @app.route('/chat') 就是把 /chat 地址和 chat() 函数关联起来,当用户访问 /chat 时,就会执行 chat() 函数里的代码。
 Blueprint:Flask 的"蓝图",用来拆分项目路由(把不同功能的路由分开管理,比如登录、聊天、上传各用一个蓝图);
@@ -226,6 +239,8 @@ def send_friend_request():
     )
     db.session.add(req)
     db.session.commit()
+
+    _emit_friend_data_changed(to_user)
     return jsonify(req.getJsonData())
 
 
@@ -263,6 +278,7 @@ def accept_friend_request():
 
     req.status = "accepted"
     db.session.commit()
+    _emit_friend_data_changed(req.from_user, req.to_user)
     return jsonify({"status": "accepted"})
 
 
@@ -280,6 +296,7 @@ def reject_friend_request():
 
     req.status = "rejected"
     db.session.commit()
+    _emit_friend_data_changed(req.from_user, req.to_user)
     return jsonify({"status": "rejected"})
 
 
@@ -298,6 +315,7 @@ def delete_friend():
 
     db.session.delete(f)
     db.session.commit()
+    _emit_friend_data_changed(user1, user2)
     return jsonify({"status": "deleted"})
 
 @views.route('/users', methods=['GET'])

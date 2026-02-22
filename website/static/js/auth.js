@@ -156,6 +156,8 @@ const AuthModule = {
             const allUsers = await API.getAllUsers();
             State.setAllUsers(allUsers);
 
+            FriendsModule.renderFriendsList();
+            FriendsModule.renderRequestsList();
             updateRequestBadge();
         } catch (error) {
             console.error('加载用户数据失败:', error);
