@@ -65,9 +65,13 @@ def get_display_avatar(sender_id, friendship):
     sender = User.query.get(sender_id)
     return sender.image if sender else None
 
-@views.route('/')#定义根路由（访问 http://127.0.0.1:5000/ 时触发）
-def landing_page():
-    return render_template('index.html')
+@views.route("/")
+@login_required
+def index():
+    return render_template(
+        "index.html",
+        user=current_user
+    )
 '''
 到时候改前端需要改
 render_template("/views/landingPage.html")：
@@ -79,9 +83,12 @@ def main_page():
     return render_template('index.html')
 
 
-@views.route('/user', methods=['GET'])
+@views.route('/user')
+@views.route("/current_user")
 @login_required
 def get_current_user():
+    print("current_user =", current_user)
+    print("is_authenticated =", current_user.is_authenticated)
     return jsonify({
         "id": current_user.id,
         "name": current_user.name,
@@ -426,36 +433,55 @@ def delete_friend():
 @views.route('/friend/set_avatar', methods=['POST'])
 @login_required
 def set_friend_avatar():
-    friend_name = request.form.get('friend')
-    image = request.files.get('image')
+    try:
+        current_app.logger.info("SET AVATAR CALLED")
+        friend_param = request.form.get('friend')
+        image = request.files.get('image')
+        current_app.logger.info("friend_name = %s", friend_param)
+        current_app.logger.info("image = %r", image)
 
-    if not friend_name or not image:
-        return jsonify({"error": "Missing friend or image"}), 400
+        if not friend_param or not image:
+            return jsonify({"error": "Missing friend or image"}), 400
 
-    target = User.query.filter_by(name=friend_name).first()
-    if not target:
-        return jsonify({"error": "User not found"}), 404
+        # Accept either numeric id or username
+        target = None
+        if friend_param.isdigit():
+            target = User.query.filter_by(id=int(friend_param)).first()
+        if not target:
+            target = User.query.filter_by(name=friend_param).first()
 
-    # 使用 ID 查询友谊记录
-    user1_id = min(current_user.id, target.id)
-    user2_id = max(current_user.id, target.id)
-    friendship = Friendship.query.filter_by(user1_id=user1_id, user2_id=user2_id).first()
-    if not friendship:
-        return jsonify({"error": "Not friends"}), 403
+        if not target:
+            return jsonify({"error": "User not found"}), 404
 
-    from flask import current_app
-    image_url = upload_image_local(image, current_app.config['UPLOAD_FOLDER'])
-    if not image_url:
-        return jsonify({"error": "Upload failed"}), 500
+        # friendship stored by ordered ids
+        user1_id = min(current_user.id, target.id)
+        user2_id = max(current_user.id, target.id)
+        friendship = Friendship.query.filter_by(user1_id=user1_id, user2_id=user2_id).first()
+        if not friendship:
+            return jsonify({"error": "Not friends"}), 403
 
-    # 根据当前用户 ID 存入对应字段
-    if current_user.id == friendship.user1_id:
-        friendship.image_by_user1 = image_url
-    else:
-        friendship.image_by_user2 = image_url
+        image_url = upload_image_local(image, current_app.config['UPLOAD_FOLDER'])
+        if not image_url:
+            return jsonify({"error": "Upload failed"}), 500
 
-    db.session.commit()
-    return jsonify({"status": "ok", "image_url": image_url})
+        if current_user.id == friendship.user1_id:
+            friendship.image_by_user1 = image_url
+        else:
+            friendship.image_by_user2 = image_url
+
+        db.session.commit()
+
+        # If you have socket notifications, emit friend data changed so other clients can refresh
+        try:
+            _emit_friend_data_changed(str(current_user.id), str(target.id))
+        except Exception:
+            current_app.logger.exception("emit friendDATA failed")
+
+        return jsonify({"status": "ok", "image_url": image_url}), 200
+
+    except Exception as e:
+        current_app.logger.exception("set_friend_avatar exception")
+        return jsonify({"error": "internal_server_error", "detail": str(e)}), 500
 
 @views.route('/users', methods=['GET'])
 @login_required

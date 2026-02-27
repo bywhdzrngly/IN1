@@ -131,6 +131,18 @@
                                 <div id="chat-status" class="chat-status">离线</div>
                             </div>
                         </div>
+                        <form id="specialAvatarForm" onsubmit="return false;">
+                            <input
+                                type="file"
+                                id="specialAvatarInput"
+                                style="display:none"
+                                onchange="uploadSpecialAvatar()"
+                            >
+
+                            <button type="button" onclick="chooseSpecialAvatar()">
+                                设置专属头像
+                            </button>
+                        </form>
                         <button id="delete-friend-btn" class="btn btn-danger btn-small">删除好友</button>
                     </div>
 
@@ -180,12 +192,13 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/2.3.0/socket.io.js"></script>
     
     <!-- 引入应用脚本 -->
-    <script src="{{ url_for('static', filename='js/state.js', v='20260221') }}"></script>
-    <script src="{{ url_for('static', filename='js/main.js', v='20260221') }}"></script>
-    <script src="{{ url_for('static', filename='js/api.js', v='20260221') }}"></script>
-    <script src="{{ url_for('static', filename='js/socket.js', v='20260221') }}"></script>
-    <script src="{{ url_for('static', filename='js/auth.js', v='20260221') }}"></script>
-    <script src="{{ url_for('static', filename='js/friend.js', v='20260221') }}"></script>
-    <script src="{{ url_for('static', filename='js/chat.js', v='20260221') }}"></script>
+    <script src="{{ url_for('static', filename='js/state.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/api.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/chat.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/socket.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/auth.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/friend.js') }}"></script>
+
 </body>
 </html>

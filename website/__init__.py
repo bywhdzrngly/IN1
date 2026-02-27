@@ -116,6 +116,8 @@ class Friendship(db.Model):
 
 
 def create_app():
+    from .views import views
+    from .auth import auth
     current_direc = os.getcwd()
     databasePath = os.path.join(current_direc, "db.sqlite")
     print(databasePath)
@@ -124,6 +126,9 @@ def create_app():
     app.config['SECRET_KEY'] = 'xyzxyz xyzxyz xyzxyz'
     app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///db.sqlite'
     # app.config['SQLALCHEMY_DATABASE_URI'] = "sqlite:///:memory:"
+    app.config['SESSION_COOKIE_DOMAIN'] = None
+    app.config['SESSION_COOKIE_SAMESITE'] = "Lax"
+    app.config['SESSION_COOKIE_SECURE'] = False
     
     # 配置本地文件上传文件夹
     UPLOAD_FOLDER = os.path.join(current_direc, 'uploads')
@@ -148,9 +153,6 @@ def create_app():
         def load_user(user_id):
             # since the user_id is just the primary key of our user table, use it in the query for the user
             return User.query.get(int(user_id))
-        # db.create_all()
-        from .views import views
-        from .auth import auth
 
         app.register_blueprint(views, url_prefix='/')
         app.register_blueprint(auth, url_prefix='/')
