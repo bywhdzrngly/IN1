@@ -122,7 +122,7 @@ body {
     display: none !important;
 }
 
-/* ==================== 认证��面 ==================== */
+/* ==================== 认证界面 ==================== */
 .page {
     display: block;
 }
@@ -562,6 +562,7 @@ body {
 
 .message.own {
     justify-content: flex-end;
+    flex-direction: row-reverse;
 }
 
 .message-avatar {

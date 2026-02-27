@@ -1,6 +1,6 @@
 from flask import Blueprint, request, redirect, url_for, session, jsonify
 # Blueprint:一个功能模块;render_template:渲染html模板;request:获取请求数据;redirect:重定向;url_for:生成URL;session:会话对象;
-from flask_login import login_user, logout_user, login_required
+from flask_login import login_user, logout_user, login_required, current_user
 from . import db
 # 等价于from website import db
 from .__init__ import User

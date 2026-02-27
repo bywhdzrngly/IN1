@@ -5,7 +5,7 @@
 
 const API = {
     // 基础 URL
-    baseURL: window.location.origin,
+    baseURL: 'http://127.0.0.1:5001',
 
     /**
      * 发送请求的通用方法
