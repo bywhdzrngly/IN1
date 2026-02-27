@@ -68,6 +68,14 @@ const ChatModule = {
                 showErrorToast('打开会话失败: ' + error.message);
             }
     },
+    
+    getAvatarForUserId(userId, conversationId) {
+        const avatar = State.avatarMap[String(userId)];
+        if (avatar && avatar.special) {
+            return avatar.special;
+        }
+        return avatar ? avatar.global : '/static/images/default-avatar.png';
+    },
 
     renderChatHeader(friendName) {
         const header = document.getElementById('chat-header');
@@ -79,7 +87,9 @@ const ChatModule = {
         const friend = State.friends.find(f => f.name === friendName);
 
         nameEl.textContent = friendName;
-        avatarEl.src = (friend && friend.image) || '/static/images/default-avatar.png';
+        const convId = (typeof State !== 'undefined' && State.currentConversationId) ? State.currentConversationId : null;
+        const avatarUrl = friend ? ChatModule.getAvatarForUserId(friend.id, convId) : '/static/images/default-avatar.png';
+        avatarEl.src = avatarUrl;
         statusEl.textContent = State.socketConnected ? '在线' : '离线';
 
         header.classList.remove('hidden');
@@ -98,6 +108,57 @@ const ChatModule = {
     },
 
     bindEvents() {
+
+        const avatar = document.getElementById("user-avatar");
+
+        if (avatar) {
+
+            const fileInput = document.createElement("input");
+            fileInput.type = "file";
+            fileInput.accept = "image/*";
+            fileInput.style.display = "none";
+            document.body.appendChild(fileInput);
+
+            avatar.addEventListener("click", () => {
+                fileInput.click();
+            });
+
+            fileInput.addEventListener("change", async () => {
+
+                const file = fileInput.files[0];
+                if (!file) return;
+
+                const formData = new FormData();
+                formData.append("image", file);
+
+                try {
+
+                    const res = await fetch("/user/avatar", {
+                        method: "POST",
+                        body: formData,
+                        credentials: "include"
+                    });
+
+                    const data = await res.json();
+
+                    if (data.status === "ok") {
+
+                        avatar.src = data.image + "?t=" + Date.now();
+                        alert("头像上传成功");
+
+                    } else {
+                        alert("头像上传失败");
+                    }
+
+                } catch (e) {
+                    console.error(e);
+                    alert("上传错误");
+                }
+
+            });
+
+        }
+
         const sendBtn = document.getElementById('send-btn');
         const input = document.getElementById('message-input');
         const imageBtn = document.getElementById('image-btn');
@@ -301,6 +362,109 @@ window.uploadSpecialAvatar = async function () {
     }
 };
 
+function setupGlobalAvatarUpload() {
+  // 尝试找到左上角头像元素
+  let userAvatarEl = document.getElementById('user-avatar') || document.querySelector('.user-info .avatar');
+  // 尝试找到隐藏文件 input
+  let globalAvatarInput = document.getElementById('global-avatar-input');
+
+  // 如果模板没有 input，就动态创建一个隐藏的 input 放到 body 里（保底）
+  if (!globalAvatarInput) {
+    globalAvatarInput = document.createElement('input');
+    globalAvatarInput.type = 'file';
+    globalAvatarInput.accept = 'image/*';
+    globalAvatarInput.id = 'global-avatar-input';
+    globalAvatarInput.style.display = 'none';
+    document.body.appendChild(globalAvatarInput);
+  }
+
+  // 如果找不到头像 DOM，就不绑定（可能页面尚未渲染某些区域）
+  if (!userAvatarEl) return;
+
+  // UX：指针样式
+  userAvatarEl.style.cursor = 'pointer';
+
+  // 点击头像打开文件选择
+  userAvatarEl.addEventListener('click', () => globalAvatarInput.click());
+
+  // 选择文件后上传
+  globalAvatarInput.addEventListener('change', async (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    // 上传状态样式（你已有的 CSS 会响应 .uploading）
+    userAvatarEl.classList && userAvatarEl.classList.add('uploading');
+
+    try {
+      // 调用你 api.js 中的封装（优先 API.uploadGlobalAvatar）
+      let res;
+      if (typeof API !== 'undefined' && API.uploadGlobalAvatar) {
+        res = await API.uploadGlobalAvatar(file);
+      } else if (typeof uploadGlobalAvatar === 'function') {
+        res = await uploadGlobalAvatar(file);
+      } else {
+        // 如果都没有，抛出错误，提示需把上传函数合并进 API
+        throw new Error('找不到上传函数：请在 api.js 中实现 API.uploadGlobalAvatar(imageFile)');
+      }
+
+      // 兼容后端返回字段（你的后端示例返回 {status:"ok", image:"/uploads/xxx.png"}）
+      const newImageUrl = res && (res.image || res.url || (res.data && res.data.image));
+      if (!newImageUrl) throw new Error('服务器未返回头像 URL');
+
+      // 更新前端状态（兼容 State / window.currentUser）
+      try {
+        if (typeof State !== 'undefined') {
+          State.currentUser = State.currentUser || {};
+          State.currentUser.image = newImageUrl;
+          State.avatarMap = State.avatarMap || {};
+          const myKey = String(State.currentUser.id || 'me');
+          State.avatarMap[myKey] = State.avatarMap[myKey] || {};
+          State.avatarMap[myKey].global = newImageUrl;
+        } else {
+          window.currentUser = window.currentUser || {};
+          window.currentUser.image = newImageUrl;
+          window.avatarMap = window.avatarMap || {};
+          window.avatarMap[String(window.currentUser.id || 'me')] = window.avatarMap[String(window.currentUser.id || 'me')] || {};
+          window.avatarMap[String(window.currentUser.id || 'me')].global = newImageUrl;
+        }
+      } catch (errState) {
+        console.warn('更新本地 State 失败：', errState);
+      }
+
+      // 立即更新 DOM 上的左上角头像
+      userAvatarEl.src = newImageUrl;
+
+      // 触发 UI 刷新：尝试调用项目内的渲染函数（如果存在）
+      try { if (typeof FriendsModule !== 'undefined' && FriendsModule.renderFriendsList) FriendsModule.renderFriendsList(); } catch(e){}
+      try { if (typeof ChatModule !== 'undefined' && ChatModule.renderChatHeader) ChatModule.renderChatHeader(); } catch(e){}
+
+      // 可选：拉取 /user 同步其余字段（兼容后端逻辑）
+      try {
+        if (typeof API !== 'undefined' && API.getCurrentUser) {
+          const updatedUser = await API.getCurrentUser();
+          if (updatedUser) {
+            if (typeof State !== 'undefined') State.currentUser = updatedUser;
+            else window.currentUser = updatedUser;
+          }
+        }
+      } catch (e) { console.warn('刷新 /user 失败', e); }
+
+      // 轻提示（项目有 toast 时替换）
+      if (typeof showErrorToast === 'function') showErrorToast('全局头像已更新');
+      else console.log('全局头像已更新');
+
+    } catch (err) {
+      console.error('上传全局头像失败：', err);
+      if (typeof showErrorToast === 'function') showErrorToast('头像上传失败：' + (err.message || err));
+      else alert('头像上传失败：' + (err.message || err));
+    } finally {
+      userAvatarEl.classList && userAvatarEl.classList.remove('uploading');
+      e.target.value = ''; // 允许重复选择同一文件
+    }
+  });
+}
+
+// 暴露给外部（main.js 将调用）
+window.setupGlobalAvatarUpload = setupGlobalAvatarUpload;
 window.ChatModule = ChatModule;
 window.renderMessages = renderMessages;
 window.scrollMessagesToBottom = scrollMessagesToBottom;
