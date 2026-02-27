@@ -63,6 +63,16 @@ function bootstrapApp() {
     AuthModule.init();
     FriendsModule.init();
     ChatModule.bindEvents();
+    if (window.setupGlobalAvatarUpload) {
+        try {
+            window.setupGlobalAvatarUpload();
+        } catch (err) {
+            console.warn('初始化全局头像上传失败：', err);
+        }
+    } else {
+        // 如果没有定义，打印一条调试信息（不是错误）
+        console.warn('setupGlobalAvatarUpload 未定义 — 确认 chat.js 是否已正确加载');
+    }
 
     const originalSetLoading = State.setLoading.bind(State);
     State.setLoading = function(loading) {
