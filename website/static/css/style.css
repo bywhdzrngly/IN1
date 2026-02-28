@@ -543,10 +543,12 @@ body {
     align-items: center;
 }
 
-.message {
+.message-item {
     display: flex;
     gap: 8px;
     animation: slideIn 0.3s ease;
+    margin: 8px 0;
+    width: 100%;
 }
 
 @keyframes slideIn {
@@ -560,9 +562,42 @@ body {
     }
 }
 
-.message.own {
+.message-item.mine {
     justify-content: flex-end;
     flex-direction: row-reverse;
+}
+
+.message-item.other {
+    justify-content: flex-start;
+}
+
+.message-item.mine .message-body {
+    align-items: flex-end;
+    text-align: right;
+    margin-left: auto;
+}
+
+.message-item.other .message-body {
+    align-items: flex-start;
+    text-align: left;
+}
+
+.message-body {
+    display: flex;
+    flex-direction: column;
+    max-width: 60%;
+    min-width: 0;
+    flex:0 1 auto;
+}
+
+.message-content {
+    padding: 8px 12px;
+    border-radius: 12px;
+
+    overflow-wrap: anywhere;   /* ⭐关键，强制长文本断行 */
+    word-break: break-word;
+
+    max-width: 100%;
 }
 
 .message-avatar {
