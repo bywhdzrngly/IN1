@@ -205,5 +205,6 @@ if __name__ == '__main__':
     host = '0.0.0.0'
     port = 5001
     print(f"Local:   http://127.0.0.1:{port}")
-    print("LAN:     http://<your-lan-ip>:{port}")
+    print(f"Local:   http://localhost:{port}")
+    print(f"LAN:     http://<your-lan-ip>:{port}")
     socketio.run(app, host=host, debug=True, port=port)
