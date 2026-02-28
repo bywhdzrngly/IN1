@@ -41,10 +41,18 @@ async function syncFriendsAndRequests() {
     }
 
     try {
-        const [friendsData, requests] = await Promise.all([
+        const [currentUser, friendsData, requests] = await Promise.all([
+            API.getCurrentUser({ silent: true }),
             API.getFriends({ silent: true }),
             API.getFriendRequests({ silent: true }),
         ]);
+
+        if (currentUser) {
+            State.setCurrentUser(currentUser);
+            if (window.AuthModule && typeof window.AuthModule.displayUserInfo === 'function') {
+                window.AuthModule.displayUserInfo(currentUser);
+            }
+        }
 
         State.setFriends((friendsData && friendsData.friends) || []);
         State.setFriendRequests(requests || []);
@@ -52,6 +60,10 @@ async function syncFriendsAndRequests() {
         FriendsModule.renderFriendsList();
         FriendsModule.renderRequestsList();
         updateRequestBadge();
+
+        if (window.ChatModule && typeof window.ChatModule.refreshCurrentConversationAvatarMap === 'function') {
+            window.ChatModule.refreshCurrentConversationAvatarMap();
+        }
     } catch (error) {
         console.warn('自动同步好友数据失败:', error);
     }

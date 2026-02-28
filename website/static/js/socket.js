@@ -41,6 +41,7 @@ const SocketManager = {
         });
 
         socket.on('friendDataChanged', () => {
+            console.log('收到 friendDataChanged，开始同步好友/头像数据');
             if (typeof window.syncFriendsAndRequests === 'function') {
                 window.syncFriendsAndRequests();
             }

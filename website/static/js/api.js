@@ -5,7 +5,7 @@
 
 const API = {
     // 基础 URL
-    baseURL: 'http://127.0.0.1:5001',
+    baseURL: window.location.origin,
 
     /**
      * 发送请求的通用方法
@@ -110,8 +110,8 @@ const API = {
     /**
      * 获取当前用户信息
      */
-    async getCurrentUser() {
-        return this.request('GET', '/user');
+    async getCurrentUser(options = {}) {
+        return this.request('GET', '/user', null, options);
     },
 
     /**

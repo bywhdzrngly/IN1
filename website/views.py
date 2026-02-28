@@ -21,6 +21,24 @@ def _emit_friend_data_changed(*usernames):
     for username in set(u for u in usernames if u):
         socketio.emit('friendDataChanged', {'username': username}, room=_user_room(username))
 
+
+def _related_usernames_for_user(user):
+    if not user:
+        return []
+
+    usernames = {user.name}
+    friendships = Friendship.query.filter(
+        (Friendship.user1_id == user.id) | (Friendship.user2_id == user.id)
+    ).all()
+
+    for friendship in friendships:
+        if friendship.user1 and friendship.user1.name:
+            usernames.add(friendship.user1.name)
+        if friendship.user2 and friendship.user2.name:
+            usernames.add(friendship.user2.name)
+
+    return list(usernames)
+
 '''
 路由(Route)本质是"URL 地址"与"后端处理函数"的映射关系,Flask 通过装饰器 @app.route() 来定义路由。比如 @app.route('/chat') 就是把 /chat 地址和 chat() 函数关联起来,当用户访问 /chat 时,就会执行 chat() 函数里的代码。
 Blueprint:Flask 的"蓝图",用来拆分项目路由(把不同功能的路由分开管理,比如登录、聊天、上传各用一个蓝图);
@@ -120,6 +138,8 @@ def update_avatar():
         db.session.rollback()
         print(f"Database commit error: {e}")
         return jsonify({"error": "database error"}), 500
+
+    _emit_friend_data_changed(*_related_usernames_for_user(user))
 
     # 返回新 URL 并再次查询确认
     return jsonify({
@@ -471,11 +491,10 @@ def set_friend_avatar():
 
         db.session.commit()
 
-        # If you have socket notifications, emit friend data changed so other clients can refresh
         try:
-            _emit_friend_data_changed(str(current_user.id), str(target.id))
+            _emit_friend_data_changed(current_user.name, target.name)
         except Exception:
-            current_app.logger.exception("emit friendDATA failed")
+            current_app.logger.exception("emit friendDataChanged failed")
 
         return jsonify({"status": "ok", "image_url": image_url}), 200
 
