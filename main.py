@@ -92,7 +92,10 @@ def conversation_message(data):
         return
     
     user1, user2 = sorted([conv.user1, conv.user2])
-    is_friend = Friendship.query.filter_by(user1=user1, user2=user2).first()
+    is_friend = Friendship.query.filter_by(
+        user1_id=int(user1),
+        user2_id=int(user2)
+    ).first()
     if not is_friend:
         return
 
@@ -159,7 +162,10 @@ def conversation_image(data):
         return
 
     user1, user2 = sorted([conv.user1, conv.user2])
-    is_friend = Friendship.query.filter_by(user1=user1, user2=user2).first()
+    is_friend = Friendship.query.filter_by(
+        user1_id=int(user1),
+        user2_id=int(user2)
+    ).first()
     if not is_friend:
         return
 
@@ -197,8 +203,8 @@ def not_found(e):
 
 if __name__ == '__main__':
     host = '0.0.0.0'
-    port = 5000
+    port = 5001
     print(f"Local:   http://127.0.0.1:{port}")
     print(f"Local:   http://localhost:{port}")
-    print("LAN:     http://<your-lan-ip>:{port}")
+    print(f"LAN:     http://<your-lan-ip>:{port}")
     socketio.run(app, host=host, debug=True, port=port)

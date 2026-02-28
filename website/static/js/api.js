@@ -110,8 +110,8 @@ const API = {
     /**
      * 获取当前用户信息
      */
-    async getCurrentUser() {
-        return this.request('GET', '/user');
+    async getCurrentUser(options = {}) {
+        return this.request('GET', '/user', null, options);
     },
 
     /**
@@ -119,6 +119,28 @@ const API = {
      */
     async logout() {
         return this.request('POST', '/logout');
+    },
+
+        // 在 API 对象内添加（或作为独立导出函数）
+    async uploadGlobalAvatar(imageFile) {
+        const formData = new FormData();
+        formData.append('image', imageFile);
+        // 如果你的 request 封装需要不同参数，请按你项目改动
+        // 这里尝试兼容两种常见封装：
+        if (this.request && typeof this.request === 'function') {
+            // this.request(method, path, body, options)
+            return this.request('POST', '/user/avatar', formData, { headers: {} });
+        } 
+        else {
+            // 直接用 fetch 回退实现
+            const resp = await fetch('/user/avatar', {
+            method: 'POST',
+            body: formData,
+            credentials: 'include'
+            });
+            if (!resp.ok) throw new Error('上传接口返回 ' + resp.status);
+            return resp.json();
+        }
     },
 
     /**
