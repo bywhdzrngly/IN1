@@ -3,6 +3,34 @@
  */
 
 const ChatModule = {
+    rebuildAvatarMap(conversation) {
+        State.avatarMap = {};
+
+        (State.friends || []).forEach(f => {
+            const special =
+                conversation.avatar_map &&
+                conversation.avatar_map[String(f.id)]
+                    ? conversation.avatar_map[String(f.id)].special
+                    : null;
+
+            State.avatarMap[String(f.id)] = {
+                global: f.image,
+                special: special
+            };
+        });
+
+        const mySpecial =
+            conversation.avatar_map &&
+            conversation.avatar_map[String(State.currentUser.id)]
+                ? conversation.avatar_map[String(State.currentUser.id)].special
+                : null;
+
+        State.avatarMap[String(State.currentUser.id)] = {
+            global: State.currentUser.image,
+            special: mySpecial
+        };
+    },
+
     async selectFriend(friendName) {
         if (!friendName) return;
 
@@ -14,59 +42,31 @@ const ChatModule = {
             console.log("conversation =", conversation);
 
             State.setCurrentConversation(conversation.id);
-            State.avatarMap = {};
-
-            // friends 列表
-            (State.friends || []).forEach(f => {
-
-                const special =
-                    conversation.avatar_map &&
-                    conversation.avatar_map[String(f.id)]
-                        ? conversation.avatar_map[String(f.id)].special
-                        : null;
-
-                State.avatarMap[String(f.id)] = {
-                    global: f.image,
-                    special: special
-                };
-            });
-
-            // 当前用户
-            const mySpecial =
-                conversation.avatar_map &&
-                conversation.avatar_map[String(State.currentUser.id)]
-                    ? conversation.avatar_map[String(State.currentUser.id)].special
-                    : null;
-
-            State.avatarMap[String(State.currentUser.id)] = {
-                global: State.currentUser.image,
-                special: mySpecial
-            };
-
+            this.rebuildAvatarMap(conversation);
             console.log("built avatarMap", State.avatarMap);
 
-            // 用 friends 列表构造
-            (State.friends || []).forEach(f => {
-                State.avatarMap[String(f.id)] = {
-                    global: f.image,
-                    special: null
-                };
-            });
+            this.renderChatHeader(friendName);
 
-            // 当前用户
-            State.avatarMap[String(State.currentUser.id)] = {
-                global: State.currentUser.image,
-                special: null
-            };
+            SocketManager.joinConversation(conversation.id);
+            SocketManager.getHistoryMessages(conversation.id);
+        } catch (error) {
+            showErrorToast('打开会话失败: ' + error.message);
+        }
+    },
 
-            console.log("built avatarMap", State.avatarMap);
-                this.renderChatHeader(friendName);
+    async refreshCurrentConversationAvatarMap() {
+        if (!State.selectedFriendName || !State.currentConversationId) {
+            return;
+        }
 
-                SocketManager.joinConversation(conversation.id);
-                SocketManager.getHistoryMessages(conversation.id);
-            } catch (error) {
-                showErrorToast('打开会话失败: ' + error.message);
-            }
+        try {
+            const conversation = await API.getOrCreateConversation(State.selectedFriendName);
+            this.rebuildAvatarMap(conversation);
+            this.renderChatHeader(State.selectedFriendName);
+            renderMessages();
+        } catch (error) {
+            console.warn('刷新会话头像映射失败:', error);
+        }
     },
     
     getAvatarForUserId(userId, conversationId) {

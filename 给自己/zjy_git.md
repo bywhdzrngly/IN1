@@ -309,3 +309,22 @@ git commit -m "chore: add gitignore rules"
 > **一个功能 = 一个分支**
 > **PR 前先更新 dev**
 
+
+
+### 一、VS Code 终端执行（推荐）
+1. 打开 VS Code 终端（快捷键 `Ctrl + ``），先同步远端仓库的最新分支信息：
+```bash
+git fetch origin
+```
+2. 创建并切换到 `feature/zqm-avatar` 分支（`-c` = `--create`，即创建新分支）：
+```bash
+# 核心指令：基于远端 origin/feature/zqm-avatar 创建并切换本地同名分支
+git switch -c feature/zqm-avatar origin/feature/zqm-avatar
+```
+3. 如果本地已有该分支，仅需切换并拉取最新代码：
+```bash
+# 先切换到该分支
+git switch feature/zqm-avatar
+# 拉取远端最新代码
+git pull origin feature/zqm-avatar
+```
