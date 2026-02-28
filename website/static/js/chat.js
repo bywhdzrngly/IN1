@@ -250,10 +250,6 @@ function renderMessages() {
         // avatar：从 avatar_map、friends 或默认中获取
         const avatarUrl = getAvatarForSender(msg.sender);
 
-<<<<<<< HEAD
-=======
-        // 发送者显示名（保持你现在的显示方式）
->>>>>>> dev
         const senderDisplay = escapeHtml(msg.sender || '');
 
         const contentHtml = isImage
@@ -271,10 +267,6 @@ function renderMessages() {
         `;
     }).join('');
 
-<<<<<<< HEAD
-=======
-    // 滚到底部（保留你现有的滚动）
->>>>>>> dev
     scrollMessagesToBottom();
 }
 
