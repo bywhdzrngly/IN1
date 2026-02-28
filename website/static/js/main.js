@@ -2,6 +2,8 @@
  * 应用入口
  */
 
+const LAST_SELECTED_FRIEND_KEY = 'lastSelectedFriendName';
+
 function showAuthPage() {
     document.getElementById('auth-page').classList.remove('hidden');
     document.getElementById('main-page').classList.add('hidden');
@@ -10,6 +12,51 @@ function showAuthPage() {
 function showMainPage() {
     document.getElementById('auth-page').classList.add('hidden');
     document.getElementById('main-page').classList.remove('hidden');
+}
+
+async function restoreLastSelectedConversation() {
+    const friendName = localStorage.getItem(LAST_SELECTED_FRIEND_KEY);
+    if (!friendName) {
+        return;
+    }
+
+    const exists = (State.friends || []).some(friend => friend.name === friendName);
+    if (!exists) {
+        localStorage.removeItem(LAST_SELECTED_FRIEND_KEY);
+        return;
+    }
+
+    if (window.ChatModule && typeof window.ChatModule.selectFriend === 'function') {
+        await window.ChatModule.selectFriend(friendName);
+    }
+}
+
+async function tryRestoreAuthenticatedSession() {
+    try {
+        const res = await fetch('/user', { credentials: 'include' });
+        if (res.status !== 200) {
+            return false;
+        }
+
+        const user = await res.json();
+        State.setCurrentUser(user);
+
+        if (window.AuthModule && typeof window.AuthModule.displayUserInfo === 'function') {
+            window.AuthModule.displayUserInfo(user);
+        }
+
+        if (window.AuthModule && typeof window.AuthModule.loadUserData === 'function') {
+            await window.AuthModule.loadUserData();
+        }
+
+        showMainPage();
+        SocketManager.init();
+        await restoreLastSelectedConversation();
+        return true;
+    } catch (error) {
+        console.warn('恢复会话失败:', error);
+        return false;
+    }
 }
 
 function showErrorToast(message) {
@@ -69,8 +116,7 @@ async function syncFriendsAndRequests() {
     }
 }
 
-function bootstrapApp() {
-    showAuthPage();
+async function bootstrapApp() {
 
     AuthModule.init();
     FriendsModule.init();
@@ -93,31 +139,14 @@ function bootstrapApp() {
     };
 
     updateLoadingIndicator();
+
+    const restored = await tryRestoreAuthenticatedSession();
+    if (!restored) {
+        showAuthPage();
+    }
 }
 
 document.addEventListener('DOMContentLoaded', bootstrapApp);
-
-async function restoreSession() {
-
-    const res = await fetch("/user", {
-        credentials: "include"
-    });
-
-    console.log("user status =", res.status);
-
-    if (res.status === 401) {
-        window.location.href = "/login";
-        return;
-    }
-
-    const user = await res.json();
-
-    State.currentUser = user;
-
-    console.log("session restored", user);
-}
-
-restoreSession();
 
 window.showAuthPage = showAuthPage;
 window.showMainPage = showMainPage;

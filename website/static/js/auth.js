@@ -120,6 +120,7 @@ const AuthModule = {
             State.setFriends([]);
             State.setFriendRequests([]);
             State.clearMessages();
+            localStorage.removeItem('lastSelectedFriendName');
 
             // 断开 Socket
             SocketManager.disconnect();

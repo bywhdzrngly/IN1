@@ -35,6 +35,7 @@ const ChatModule = {
         if (!friendName) return;
 
         State.setSelectedFriend(friendName);
+        localStorage.setItem('lastSelectedFriendName', friendName);
         FriendsModule.renderFriendsList();
 
         try {
@@ -99,6 +100,7 @@ const ChatModule = {
     resetChatPanel() {
         State.setCurrentConversation(null);
         State.clearMessages();
+        localStorage.removeItem('lastSelectedFriendName');
 
         document.getElementById('chat-header').classList.add('hidden');
         document.getElementById('input-area').classList.add('hidden');
