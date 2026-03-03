@@ -133,7 +133,7 @@ async function bootstrapApp() {
     }
 
     const originalSetLoading = State.setLoading.bind(State);
-    State.setLoading = function(loading) {
+    State.setLoading = function (loading) {
         originalSetLoading(loading);
         updateLoadingIndicator();
     };
@@ -147,28 +147,6 @@ async function bootstrapApp() {
 }
 
 document.addEventListener('DOMContentLoaded', bootstrapApp);
-
-async function restoreSession() {
-
-    const res = await fetch("/user", {
-        credentials: "include"
-    });
-
-    console.log("user status =", res.status);
-
-    if (res.status === 401) {
-        window.location.href = "/login";
-        return;
-    }
-
-    const user = await res.json();
-
-    State.currentUser = user;
-
-    console.log("session restored", user);
-}
-
-restoreSession();
 
 window.showAuthPage = showAuthPage;
 window.showMainPage = showMainPage;

@@ -34,6 +34,10 @@ const AuthModule = {
 
         try {
             State.setLoading(true);
+            State.resetForAccountSwitch();
+            if (window.ChatModule && typeof window.ChatModule.resetChatPanel === 'function') {
+                window.ChatModule.resetChatPanel();
+            }
             const result = await API.login(name, password, remember);
 
             // 登录成功
@@ -92,7 +96,7 @@ const AuthModule = {
             this.showSignupError(''); // 清除错误
             this.switchToLogin();
             showAuthPage();
-            
+
             // 填充登录表单
             document.getElementById('login-name').value = name;
             showErrorToast('注册成功，请登录！');
@@ -116,11 +120,14 @@ const AuthModule = {
             await API.logout();
 
             // 清空状态
-            State.setCurrentUser({ id: null, name: null, email: null, image: null });
-            State.setFriends([]);
-            State.setFriendRequests([]);
-            State.clearMessages();
+            State.resetForAccountSwitch();
             localStorage.removeItem('lastSelectedFriendName');
+            if (window.ChatModule && typeof window.ChatModule.resetChatPanel === 'function') {
+                window.ChatModule.resetChatPanel();
+            }
+            FriendsModule.renderFriendsList();
+            FriendsModule.renderRequestsList();
+            updateRequestBadge();
 
             // 断开 Socket
             SocketManager.disconnect();
@@ -171,7 +178,7 @@ const AuthModule = {
     displayUserInfo(user) {
         document.getElementById('user-name').textContent = user.name;
         document.getElementById('user-email').textContent = user.email || '';
-        
+
         const avatar = document.getElementById('user-avatar');
         if (user.image) {
             avatar.src = user.image;

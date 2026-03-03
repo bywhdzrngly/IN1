@@ -156,4 +156,18 @@ const State = {
     clearError() {
         this.error = null;
     },
+
+    resetForAccountSwitch() {
+        this.currentUser = { id: null, name: null, email: null, image: null };
+        this.allUsers = [];
+        this.friends = [];
+        this.friendRequests = [];
+        this.selectedFriendName = null;
+        this.currentConversationId = null;
+        this.messages = [];
+        this.searchQuery = '';
+        this.searchResults = [];
+        this.error = null;
+        this.avatarMap = {};
+    },
 };
