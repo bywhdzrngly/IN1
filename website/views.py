@@ -5,7 +5,10 @@ from .__init__ import User, db, Conversation, Message, FriendRequest, Friendship
 from datetime import datetime
 import os
 import uuid
+<<<<<<< HEAD
 import re
+=======
+>>>>>>> 47b34f4 (实现改名功能)
 from werkzeug.utils import secure_filename
 from sqlalchemy.exc import IntegrityError
 
@@ -332,6 +335,9 @@ def get_or_create_conversation(username):
     conversation_data = conv.getJsonData()
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 47b34f4 (实现改名功能)
     # 兼容前端历史字段名：avatar_map（当前使用）与 map（旧字段）
     conversation_data['avatar_map'] = avatar_and_bubble_map
     conversation_data['map'] = avatar_and_bubble_map

@@ -3,6 +3,7 @@
  */
 
 const DEFAULT_AVATAR_DATA_URI = 'data:image/svg+xml,%3Csvg%20xmlns%3D%22http://www.w3.org/2000/svg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22currentColor%22%3E%3Ccircle%20cx%3D%2212%22%20cy%3D%2212%22%20r%3D%2210%22/%3E%3Cpath%20d%3D%22M12%2012c2.21%200%204-1.79%204-4s-1.79-4-4-4-4%201.79-4%204%201.79%204%204%204zm0%202c-2.67%200-8%201.34-8%204v2h16v-2c0-2.66-5.33-4-8-4z%22/%3E%3C/svg%3E';
+<<<<<<< HEAD
 const BUBBLE_DRAW_DEFAULT_BG = '#ffffff';
 const BUBBLE_DRAW_DEFAULT_LINE = '#1f2937';
 const BUBBLE_DRAW_DEFAULT_FILL = '#22c55e';
@@ -49,6 +50,8 @@ const BubbleComposer = {
     undoStack: [],
     pendingTextColorResolve: null,
 };
+=======
+>>>>>>> 47b34f4 (实现改名功能)
 
 const ChatModule = {
     rebuildAvatarMap(conversation) {
@@ -56,7 +59,14 @@ const ChatModule = {
         State.avatarMap = {};
 
         (State.friends || []).forEach(f => {
+<<<<<<< HEAD
             const friendMap = conversationAvatarMap[String(f.id)] || {};
+=======
+            const special =
+                conversationAvatarMap[String(f.id)]
+                    ? conversationAvatarMap[String(f.id)].special
+                    : null;
+>>>>>>> 47b34f4 (实现改名功能)
 
             State.avatarMap[String(f.id)] = {
                 global: f.image,
@@ -66,7 +76,14 @@ const ChatModule = {
             };
         });
 
+<<<<<<< HEAD
         const myMap = conversationAvatarMap[String(State.currentUser.id)] || {};
+=======
+        const mySpecial =
+            conversationAvatarMap[String(State.currentUser.id)]
+                ? conversationAvatarMap[String(State.currentUser.id)].special
+                : null;
+>>>>>>> 47b34f4 (实现改名功能)
 
         State.avatarMap[String(State.currentUser.id)] = {
             global: State.currentUser.image,
@@ -290,6 +307,7 @@ function getAvatarForSender(sender) {
     if (friendObj && friendObj.image) return friendObj.image;
 
     return DEFAULT_AVATAR_DATA_URI;
+<<<<<<< HEAD
 }
 
 function getBubbleForSender(sender) {
@@ -336,6 +354,8 @@ function getBubbleTextColorForSender(sender) {
     }
 
     return null;
+=======
+>>>>>>> 47b34f4 (实现改名功能)
 }
 
 function renderMessages() {
