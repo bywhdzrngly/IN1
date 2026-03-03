@@ -38,9 +38,7 @@ class User(UserMixin, db.Model):
 
     
 class Conversation(db.Model):
-    __table_args__ = (
-        db.UniqueConstraint('user1', 'user2', name='uq_conversation_users'),
-    )
+    #增加自己聊天功能时删去user1和user2不同的限制
     id = db.Column(db.Integer, primary_key=True)
     user1 = db.Column(db.String(80), index=True)
     user2 = db.Column(db.String(80), index=True)
@@ -93,8 +91,8 @@ class Friendship(db.Model):
     timestamp = db.Column(db.DateTime, index=True)
     image_by_user1 = db.Column(db.String(256), nullable=True)  # user1 设置的专属头像
     image_by_user2 = db.Column(db.String(256), nullable=True)  # user2 设置的专属头像
-    bubble1 = db.Column(db.String(256), nullable=True) # user1 气泡
-    bubble2 = db.Column(db.String(256), nullable=True)  #user2 气泡
+    bubble1 = db.Column(db.String(256), nullable=True)  # user1 气泡
+    bubble2 = db.Column(db.String(256), nullable=True)  # user2 气泡
 
     # 关联 User 对象，便于获取用户名等信息
     user1 = db.relationship('User', foreign_keys=[user1_id])

@@ -5,6 +5,8 @@ from .__init__ import User, db, Conversation, Message, FriendRequest, Friendship
 from datetime import datetime
 import os
 import uuid
+from flask import Blueprint, request, jsonify, current_app, render_template, session
+from flask_login import logout_user
 
 views = Blueprint("views", __name__)
 
@@ -96,6 +98,66 @@ def get_current_user():
         "image": current_user.image,
     })
 
+@views.route('/user', methods=['DELETE'])
+@login_required
+def delete_user():
+    user = User.query.get(current_user.id)
+    if not user:
+        return jsonify({"error": "user not found"}), 404
+
+    old_name = user.name
+    usernames_to_notify = set()# 建一个集合用来放friendship或者其他关系里面的对面用户
+
+    try:
+        # 1. 删除friendship
+        friendships = Friendship.query.filter(
+            (Friendship.user1_id == user.id) | (Friendship.user2_id == user.id)
+        ).all()
+        for f in friendships:
+            if f.user1_id == user.id and f.user2:
+                usernames_to_notify.add(f.user2.name) #将对面用户放入集合
+            elif f.user2_id == user.id and f.user1:
+                usernames_to_notify.add(f.user1.name)
+            db.session.delete(f)
+
+        # 2. 删除好友请求
+        friend_requests = FriendRequest.query.filter(
+            (FriendRequest.from_user == user.name) | (FriendRequest.to_user == user.name)
+        ).all()
+        for req in friend_requests:
+            if req.from_user == user.name:
+                usernames_to_notify.add(req.to_user)
+            else:
+                usernames_to_notify.add(req.from_user)
+            db.session.delete(req)
+
+        # 3. 删除对话及消息
+        convs = Conversation.query.filter(
+            (Conversation.user1 == user.name) | (Conversation.user2 == user.name)
+        ).all()
+        conv_ids = [c.id for c in convs]
+        if conv_ids:
+            Message.query.filter(Message.conversation_id.in_(conv_ids)).delete(synchronize_session=False)
+        for c in convs:
+            db.session.delete(c)
+
+        # 4. 最后删除用户自身
+        User.query.filter(User.id == user.id).delete()
+
+        db.session.commit()
+
+        # 通知集合中的用户
+        _emit_friend_data_changed(old_name, *usernames_to_notify)
+
+        logout_user()
+        session.clear()
+
+        return jsonify({"status": "ok", "message": "User deleted successfully"}), 200
+
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error deleting user: {e}", exc_info=True)
+        return jsonify({"error": "database error"}), 500
 
 @views.route('/user/avatar', methods=['POST'])
 @login_required
@@ -108,7 +170,6 @@ def update_avatar():
     if not image_url:
         return jsonify({"error": "upload failed"}), 500
 
-    # 重新查询当前用户，确保使用当前会话中的对象
     user = User.query.get(current_user.id)
     if not user:
         return jsonify({"error": "user not found"}), 404
@@ -123,18 +184,78 @@ def update_avatar():
 
     _emit_friend_data_changed(*_related_usernames_for_user(user))
 
-    # 返回新 URL 并再次查询确认
+    # 返回新 URL 再次查询确认
     return jsonify({
         "status": "ok",
         "image": image_url
     })
 
+@views.route('/user/name', methods=['POST'])
+@login_required
+def update_username():
+    data = request.get_json(silent=True) or {}
+    new_name = data.get('name') or request.form.get('name')
+    if not new_name:
+        return jsonify({"error": "missing new name"}), 400
+
+    new_name = new_name.strip()
+    if not new_name:
+        return jsonify({"error": "name cannot be empty"}), 400
+
+    user = User.query.get(current_user.id)
+    if not user:
+        return jsonify({"error": "user not found"}), 404
+
+    if new_name == user.name:
+        return jsonify({"status": "ok", "name": user.name}), 200
+
+    existing = User.query.filter_by(name=new_name).first()
+    if existing and existing.id != user.id:
+        return jsonify({"error": "username already taken"}), 400
+
+    old_name = user.name
+
+    try:
+        # 1. User 表
+        user.name = new_name
+
+        # 2. Conversation 表中的 user1/user2
+        Conversation.query.filter_by(user1=old_name).update({"user1": new_name})
+        Conversation.query.filter_by(user2=old_name).update({"user2": new_name})
+
+        # 3. Message 表中的 sender
+        Message.query.filter_by(sender=old_name).update({"sender": new_name})
+
+        # 4. FriendRequest 表中的 from_user/to_user
+        FriendRequest.query.filter_by(from_user=old_name).update({"from_user": new_name})
+        FriendRequest.query.filter_by(to_user=old_name).update({"to_user": new_name})
+
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error updating username: {e}", exc_info=True)
+        return jsonify({"error": "database error"}), 500
+
+    if session.get('username') == old_name:
+        session['username'] = new_name
+
+    _emit_friend_data_changed(old_name, new_name)
+
+    return jsonify({"status": "ok", "name": user.name})
+
 @views.route('/conversation/<username>')
 @login_required
 def get_or_create_conversation(username):
     me = current_user
-    if username == me.name:
-        return jsonify({"error": "cannot chat with yourself"}), 400
+    if username == me.name:  #新增 自己聊天的功能
+        me = current_user
+        if username == me.name:
+            conv = Conversation.query.filter_by(user1=me.name,user2=me.name).first()
+            if not conv:
+                conv = Conversation(user1=me.name,user2=me.name)
+                db.session.add(conv)
+                db.session.commit()
+            return jsonify(conv.getJsonData())
 
     target = User.query.filter_by(name=username).first()
     if not target:
@@ -173,11 +294,8 @@ def get_or_create_conversation(username):
         }
     }
 
-
-
     conversation_data = conv.getJsonData()
     conversation_data['map'] = avatar_and_bubble_map
-
 
     return jsonify(conversation_data)
 
@@ -200,18 +318,20 @@ def send_message():
     if current_user.name not in (conv.user1, conv.user2):
         return jsonify({"error": "forbidden"}), 403
 
-    # 获取对话双方的 User 对象
-    user1 = User.query.filter_by(name=conv.user1).first()
-    user2 = User.query.filter_by(name=conv.user2).first()
-    if not user1 or not user2:
-        return jsonify({"error": "conversation participants invalid"}), 500
+    if conv.user1 == conv.user2:
+        pass
+    else:
+        user1 = User.query.filter_by(name=conv.user1).first()
+        user2 = User.query.filter_by(name=conv.user2).first()
+        if not user1 or not user2:
+            return jsonify({"error": "conversation participants invalid"}), 500
 
-    # 检查是否仍是好友（用 ID）
-    user1_id = min(user1.id, user2.id)
-    user2_id = max(user1.id, user2.id)
-    is_friend = Friendship.query.filter_by(user1_id=user1_id, user2_id=user2_id).first()
-    if not is_friend:
-        return jsonify({"error": "not friends"}), 403
+        # 检查是否是好友（用 ID）
+        user1_id = min(user1.id, user2.id)
+        user2_id = max(user1.id, user2.id)
+        is_friend = Friendship.query.filter_by(user1_id=user1_id, user2_id=user2_id).first()
+        if not is_friend:
+            return jsonify({"error": "not friends"}), 403
 
     msg = Message(
         conversation_id=conversation_id,
