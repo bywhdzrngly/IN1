@@ -94,18 +94,12 @@ class Friendship(db.Model):
     timestamp = db.Column(db.DateTime, index=True)
     image_by_user1 = db.Column(db.String(256), nullable=True)  # user1 设置的专属头像
     image_by_user2 = db.Column(db.String(256), nullable=True)  # user2 设置的专属头像
-<<<<<<< HEAD
-<<<<<<< HEAD
+
     bubble1 = db.Column(db.String(256), nullable=True)  # user1 气泡
     bubble2 = db.Column(db.String(256), nullable=True)  # user2 气泡
     bubble_text_color1 = db.Column(db.String(16), nullable=True)  # user1 文字颜色
     bubble_text_color2 = db.Column(db.String(16), nullable=True)  # user2 文字颜色
-=======
-    bubble1 = db.Column(db.String(256), nullable=True) # user1 气泡
-    bubble2 = db.Column(db.String(256), nullable=True)  #user2 气泡
->>>>>>> 35a593c (Add bubble fields for user1 and user2)
-=======
->>>>>>> e183948 (Revert "Merge pull request #7 from bywhdzrngly/feature/bubble")
+
 
     # 关联 User 对象，便于获取用户名等信息
     user1 = db.relationship('User', foreign_keys=[user1_id])
@@ -125,16 +119,9 @@ class Friendship(db.Model):
             "timestamp": self.timestamp.isoformat() if self.timestamp else None,
             "image_by_user1": self.image_by_user1,
             "image_by_user2": self.image_by_user2,
-<<<<<<< HEAD
-            "bubble1": self.bubble1,
-            "bubble2": self.bubble2,
-<<<<<<< HEAD
+
             "bubble_text_color1": self.bubble_text_color1,
             "bubble_text_color2": self.bubble_text_color2,
-=======
->>>>>>> 35a593c (Add bubble fields for user1 and user2)
-=======
->>>>>>> e183948 (Revert "Merge pull request #7 from bywhdzrngly/feature/bubble")
         }
 
 

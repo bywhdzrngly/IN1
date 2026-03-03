@@ -5,10 +5,7 @@ from .__init__ import User, db, Conversation, Message, FriendRequest, Friendship
 from datetime import datetime
 import os
 import uuid
-<<<<<<< HEAD
 import re
-=======
->>>>>>> 47b34f4 (实现改名功能)
 from werkzeug.utils import secure_filename
 from sqlalchemy.exc import IntegrityError
 
@@ -89,8 +86,7 @@ def upload_image_local(file, upload_folder):
     # 返回本地访问路径
     return f"/uploads/{filename}"
 
-<<<<<<< HEAD
-<<<<<<< HEAD
+
 
 def upload_bubble_local(file, upload_folder):
     """保存气泡图片到 uploads/bubbles 并返回可访问路径"""
@@ -111,9 +107,6 @@ def upload_bubble_local(file, upload_folder):
     file.save(file_path)
     return f"/uploads/bubbles/{filename}"
 
-=======
->>>>>>> 1b45cbb (Refactor avatar handling and remove unused function)
-=======
 def get_display_avatar(sender_id, friendship):
     """
     根据发送者ID和友谊对象返回要显示的头像URL。
@@ -132,7 +125,7 @@ def get_display_avatar(sender_id, friendship):
     # 回退到全局头像
     sender = User.query.get(sender_id)
     return sender.image if sender else None
->>>>>>> e183948 (Revert "Merge pull request #7 from bywhdzrngly/feature/bubble")
+
 
 @views.route("/")
 @login_required
@@ -304,50 +297,24 @@ def get_or_create_conversation(username):
     avatar_map = {
         str(me.id): {
             "global": me.image,
-<<<<<<< HEAD
+
             "special": friendship.image_by_user1 if me.id == friendship.user1_id else friendship.image_by_user2,
-<<<<<<< HEAD
             "bubble": friendship.bubble1 if me.id == friendship.user1_id else friendship.bubble2,
             "text_color": friendship.bubble_text_color1 if me.id == friendship.user1_id else friendship.bubble_text_color2,
-=======
-            "bubble": friendship.bubble1 if me.id == friendship.user1_id else friendship.bubble2
->>>>>>> 1b45cbb (Refactor avatar handling and remove unused function)
         },
         str(target.id): {
             "global": target.image,
             "special": friendship.image_by_user2 if me.id == friendship.user1_id else friendship.image_by_user1,
-<<<<<<< HEAD
             "bubble": friendship.bubble2 if me.id == friendship.user1_id else friendship.bubble1,
             "text_color": friendship.bubble_text_color2 if me.id == friendship.user1_id else friendship.bubble_text_color1,
-=======
-            "bubble": friendship.bubble2 if me.id == friendship.user1_id else friendship.bubble1
->>>>>>> 1b45cbb (Refactor avatar handling and remove unused function)
-=======
-            "special": friendship.image_by_user1 if me.id == friendship.user1_id else friendship.image_by_user2
-        },
-        str(target.id): {
-            "global": target.image,
-            "special": friendship.image_by_user2 if me.id == friendship.user1_id else friendship.image_by_user1
->>>>>>> e183948 (Revert "Merge pull request #7 from bywhdzrngly/feature/bubble")
         }
     }
 
     conversation_data = conv.getJsonData()
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 47b34f4 (实现改名功能)
-    # 兼容前端历史字段名：avatar_map（当前使用）与 map（旧字段）
-    conversation_data['avatar_map'] = avatar_and_bubble_map
-    conversation_data['map'] = avatar_and_bubble_map
-=======
-    conversation_data['map'] = avatar_and_bubble_map
 
->>>>>>> 1b45cbb (Refactor avatar handling and remove unused function)
-=======
+    # 兼容前端历史字段名：avatar_map（当前使用）与 map（旧字段）
     conversation_data['avatar_map'] = avatar_map
->>>>>>> e183948 (Revert "Merge pull request #7 from bywhdzrngly/feature/bubble")
+    conversation_data['map'] = avatar_map
 
     return jsonify(conversation_data)
 
@@ -659,11 +626,9 @@ def set_friend_avatar():
         current_app.logger.exception("set_friend_avatar exception")
         return jsonify({"error": "internal_server_error", "detail": str(e)}), 500
 
-<<<<<<< HEAD
 @views.route('/friend/set_bubble', methods=['POST'])
 @login_required
 def set_friend_bubble():
-<<<<<<< HEAD
     friend_param = request.form.get('friend')
     image = request.files.get('image')
 
@@ -676,16 +641,6 @@ def set_friend_bubble():
         target = User.query.filter_by(id=int(friend_param)).first()
     if not target:
         target = User.query.filter_by(name=friend_param).first()
-
-=======
-    friend_name = request.form.get('friend')
-    image = request.files.get('image')
-
-    if not friend_name or not image:
-        return jsonify({"error": "Missing friend or image"}), 400
-
-    target = User.query.filter_by(name=friend_name).first()
->>>>>>> 1b45cbb (Refactor avatar handling and remove unused function)
     if not target:
         return jsonify({"error": "User not found"}), 404
 
@@ -696,12 +651,7 @@ def set_friend_bubble():
     if not friendship:
         return jsonify({"error": "Not friends"}), 403
 
-<<<<<<< HEAD
     image_url = upload_bubble_local(image, current_app.config['UPLOAD_FOLDER'])
-=======
-    from flask import current_app
-    image_url = upload_image_local(image, current_app.config['UPLOAD_FOLDER'])
->>>>>>> 1b45cbb (Refactor avatar handling and remove unused function)
     if not image_url:
         return jsonify({"error": "Upload failed"}), 500
 
@@ -711,7 +661,6 @@ def set_friend_bubble():
     else:
         friendship.bubble2 = image_url
 
-<<<<<<< HEAD
     try:
         db.session.commit()
     except Exception:
@@ -776,14 +725,6 @@ def set_friend_bubble_text_color():
 
     _emit_friend_data_changed(current_user.name, target.name)
     return jsonify({"status": "ok", "text_color": normalized_color})
-
-=======
-    db.session.commit()
-    return jsonify({"status": "ok", "image_url": image_url})
-
->>>>>>> 1b45cbb (Refactor avatar handling and remove unused function)
-=======
->>>>>>> e183948 (Revert "Merge pull request #7 from bywhdzrngly/feature/bubble")
 @views.route('/users', methods=['GET'])
 @login_required
 def list_all_users():
