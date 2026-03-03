@@ -87,21 +87,25 @@ def conversation_message(data):
     if not conv:
         return
 
-    username = current_user.name if session.get("USERNAME") is None else session['username']
-    if username not in (conv.user1, conv.user2):
+    if current_user.name not in (conv.user1, conv.user2):
         return
-    
-    user1, user2 = sorted([conv.user1, conv.user2])
-    is_friend = Friendship.query.filter_by(
-        user1_id=int(user1),
-        user2_id=int(user2)
-    ).first()
-    if not is_friend:
-        return
+
+    if conv.user1 != conv.user2:
+        other_username = conv.user1 if conv.user1 != current_user.name else conv.user2
+        other_user = User.query.filter_by(name=other_username).first()
+        if not other_user:
+            return
+
+        # 用 ID 检查友谊，确保 user1_id < user2_id
+        user1_id = min(current_user.id, other_user.id)
+        user2_id = max(current_user.id, other_user.id)
+        friendship = Friendship.query.filter_by(user1_id=user1_id, user2_id=user2_id).first()
+        if not friendship:
+            return
 
     msg = Message(
         conversation_id=conversation_id,
-        sender=username,
+        sender=current_user.name,
         content=content,
         timestamp=datetime.utcnow(),
     )
@@ -110,7 +114,7 @@ def conversation_message(data):
 
     payload = msg.getJsonData()
     join_room(_conversation_room(conversation_id))
-    emit('receiveConversationMessage', payload, room=_conversation_room(conversation_id), broadcast=True)
+    emit('receiveConversationMessage', payload, room=_conversation_room(conversation_id),broadcast=True)
 
 
 @socketio.on('getConversationMessages')
@@ -157,21 +161,25 @@ def conversation_image(data):
     if not conv:
         return
 
-    username = current_user.name if session.get("USERNAME") is None else session['username']
-    if username not in (conv.user1, conv.user2):
+    if current_user.name not in (conv.user1, conv.user2):
         return
 
-    user1, user2 = sorted([conv.user1, conv.user2])
-    is_friend = Friendship.query.filter_by(
-        user1_id=int(user1),
-        user2_id=int(user2)
-    ).first()
-    if not is_friend:
-        return
+    if conv.user1 != conv.user2:
+        other_username = conv.user1 if conv.user1 != current_user.name else conv.user2
+        other_user = User.query.filter_by(name=other_username).first()
+        if not other_user:
+            return
+
+        # id检查
+        user1_id = min(current_user.id, other_user.id)
+        user2_id = max(current_user.id, other_user.id)
+        friendship = Friendship.query.filter_by(user1_id=user1_id, user2_id=user2_id).first()
+        if not friendship:
+            return
 
     msg = Message(
         conversation_id=conversation_id,
-        sender=username,
+        sender=current_user.name,
         content=image_url,
         timestamp=datetime.utcnow(),
     )
@@ -180,7 +188,8 @@ def conversation_image(data):
 
     payload = msg.getJsonData()
     join_room(_conversation_room(conversation_id))
-    emit('receiveConversationMessage', payload, room=_conversation_room(conversation_id), broadcast=True)
+    emit('receiveConversationMessage', payload, room=_conversation_room(conversation_id),broadcast=True)
+
     
 def random_string(letter_count, digit_count):  
     str1 = ''.join((random.choice(string.ascii_letters) for x in range(letter_count)))  
