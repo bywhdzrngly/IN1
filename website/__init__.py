@@ -96,6 +96,7 @@ class Friendship(db.Model):
     image_by_user2 = db.Column(db.String(256), nullable=True)  # user2 设置的专属头像
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
     bubble1 = db.Column(db.String(256), nullable=True)  # user1 气泡
     bubble2 = db.Column(db.String(256), nullable=True)  # user2 气泡
     bubble_text_color1 = db.Column(db.String(16), nullable=True)  # user1 文字颜色
@@ -106,6 +107,10 @@ class Friendship(db.Model):
 >>>>>>> 35a593c (Add bubble fields for user1 and user2)
 =======
 >>>>>>> e183948 (Revert "Merge pull request #7 from bywhdzrngly/feature/bubble")
+=======
+    bubble1 = db.Column(db.String(256), nullable=True) # user1 气泡
+    bubble2 = db.Column(db.String(256), nullable=True)  #user2 气泡
+>>>>>>> origin/dev
 
     # 关联 User 对象，便于获取用户名等信息
     user1 = db.relationship('User', foreign_keys=[user1_id])
@@ -126,6 +131,7 @@ class Friendship(db.Model):
             "image_by_user1": self.image_by_user1,
             "image_by_user2": self.image_by_user2,
 <<<<<<< HEAD
+<<<<<<< HEAD
             "bubble1": self.bubble1,
             "bubble2": self.bubble2,
 <<<<<<< HEAD
@@ -135,6 +141,10 @@ class Friendship(db.Model):
 >>>>>>> 35a593c (Add bubble fields for user1 and user2)
 =======
 >>>>>>> e183948 (Revert "Merge pull request #7 from bywhdzrngly/feature/bubble")
+=======
+            "bubble1": self.bubble1,
+            "bubble2": self.bubble2,
+>>>>>>> origin/dev
         }
 
 

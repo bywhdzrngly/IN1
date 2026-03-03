@@ -91,6 +91,7 @@ def upload_image_local(file, upload_folder):
 
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 
 def upload_bubble_local(file, upload_folder):
     """保存气泡图片到 uploads/bubbles 并返回可访问路径"""
@@ -133,6 +134,8 @@ def get_display_avatar(sender_id, friendship):
     sender = User.query.get(sender_id)
     return sender.image if sender else None
 >>>>>>> e183948 (Revert "Merge pull request #7 from bywhdzrngly/feature/bubble")
+=======
+>>>>>>> origin/dev
 
 @views.route("/")
 @login_required
@@ -301,9 +304,10 @@ def get_or_create_conversation(username):
         db.session.add(conv)
         db.session.commit()
 
-    avatar_map = {
+    avatar_and_bubble_map = {
         str(me.id): {
             "global": me.image,
+<<<<<<< HEAD
 <<<<<<< HEAD
             "special": friendship.image_by_user1 if me.id == friendship.user1_id else friendship.image_by_user2,
 <<<<<<< HEAD
@@ -329,10 +333,22 @@ def get_or_create_conversation(username):
             "global": target.image,
             "special": friendship.image_by_user2 if me.id == friendship.user1_id else friendship.image_by_user1
 >>>>>>> e183948 (Revert "Merge pull request #7 from bywhdzrngly/feature/bubble")
+=======
+            "special": friendship.image_by_user1 if me.id == friendship.user1_id else friendship.image_by_user2,
+            "bubble": friendship.bubble1 if me.id == friendship.user1_id else friendship.bubble2
+        },
+        str(target.id): {
+            "global": target.image,
+            "special": friendship.image_by_user2 if me.id == friendship.user1_id else friendship.image_by_user1,
+            "bubble": friendship.bubble2 if me.id == friendship.user1_id else friendship.bubble1
+>>>>>>> origin/dev
         }
     }
 
+
+
     conversation_data = conv.getJsonData()
+<<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
@@ -348,6 +364,10 @@ def get_or_create_conversation(username):
 =======
     conversation_data['avatar_map'] = avatar_map
 >>>>>>> e183948 (Revert "Merge pull request #7 from bywhdzrngly/feature/bubble")
+=======
+    conversation_data['map'] = avatar_and_bubble_map
+
+>>>>>>> origin/dev
 
     return jsonify(conversation_data)
 
@@ -660,6 +680,7 @@ def set_friend_avatar():
         return jsonify({"error": "internal_server_error", "detail": str(e)}), 500
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 @views.route('/friend/set_bubble', methods=['POST'])
 @login_required
 def set_friend_bubble():
@@ -678,6 +699,11 @@ def set_friend_bubble():
         target = User.query.filter_by(name=friend_param).first()
 
 =======
+=======
+@views.route('/friend/set_bubble', methods=['POST'])
+@login_required
+def set_friend_bubble():
+>>>>>>> origin/dev
     friend_name = request.form.get('friend')
     image = request.files.get('image')
 
@@ -685,7 +711,10 @@ def set_friend_bubble():
         return jsonify({"error": "Missing friend or image"}), 400
 
     target = User.query.filter_by(name=friend_name).first()
+<<<<<<< HEAD
 >>>>>>> 1b45cbb (Refactor avatar handling and remove unused function)
+=======
+>>>>>>> origin/dev
     if not target:
         return jsonify({"error": "User not found"}), 404
 
@@ -697,11 +726,16 @@ def set_friend_bubble():
         return jsonify({"error": "Not friends"}), 403
 
 <<<<<<< HEAD
+<<<<<<< HEAD
     image_url = upload_bubble_local(image, current_app.config['UPLOAD_FOLDER'])
 =======
     from flask import current_app
     image_url = upload_image_local(image, current_app.config['UPLOAD_FOLDER'])
 >>>>>>> 1b45cbb (Refactor avatar handling and remove unused function)
+=======
+    from flask import current_app
+    image_url = upload_image_local(image, current_app.config['UPLOAD_FOLDER'])
+>>>>>>> origin/dev
     if not image_url:
         return jsonify({"error": "Upload failed"}), 500
 
@@ -711,6 +745,7 @@ def set_friend_bubble():
     else:
         friendship.bubble2 = image_url
 
+<<<<<<< HEAD
 <<<<<<< HEAD
     try:
         db.session.commit()
@@ -784,6 +819,11 @@ def set_friend_bubble_text_color():
 >>>>>>> 1b45cbb (Refactor avatar handling and remove unused function)
 =======
 >>>>>>> e183948 (Revert "Merge pull request #7 from bywhdzrngly/feature/bubble")
+=======
+    db.session.commit()
+    return jsonify({"status": "ok", "image_url": image_url})
+
+>>>>>>> origin/dev
 @views.route('/users', methods=['GET'])
 @login_required
 def list_all_users():
