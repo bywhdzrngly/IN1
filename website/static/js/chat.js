@@ -490,6 +490,27 @@ function ensureBubblePainterLayer() {
     }
 }
 
+function getGuideLineColorByBackground(bgColor) {
+    const color = String(bgColor || '').trim().toLowerCase();
+    const match = color.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+
+    let hex = '#ffffff';
+    if (match) {
+        if (match[1].length === 3) {
+            hex = `#${match[1][0]}${match[1][0]}${match[1][1]}${match[1][1]}${match[1][2]}${match[1][2]}`.toLowerCase();
+        } else {
+            hex = `#${match[1].toLowerCase()}`;
+        }
+    }
+
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    const luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+
+    return luminance < 0.45 ? 'rgba(255, 255, 255, 0.78)' : 'rgba(0, 0, 0, 0.45)';
+}
+
 function drawBubbleNineSliceGuide(ctx, width, height) {
     const x1 = width / 3;
     const x2 = (width * 2) / 3;
@@ -498,7 +519,7 @@ function drawBubbleNineSliceGuide(ctx, width, height) {
 
     ctx.save();
     ctx.setLineDash([6, 4]);
-    ctx.strokeStyle = 'rgba(0, 0, 0, 0.35)';
+    ctx.strokeStyle = getGuideLineColorByBackground(BubbleComposer.bgColor);
     ctx.lineWidth = 1;
 
     ctx.beginPath();
