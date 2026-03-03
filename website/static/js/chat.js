@@ -11,6 +11,7 @@ const BubbleComposer = {
     actionModal: null,
     drawModal: null,
     exportModal: null,
+    textColorModal: null,
     canvas: null,
     ctx: null,
     bgInput: null,
@@ -26,6 +27,10 @@ const BubbleComposer = {
     exportUploadOnlyBtn: null,
     exportUploadSaveBtn: null,
     exportBackBtn: null,
+    textColorInput: null,
+    textColorPreview: null,
+    textColorConfirmBtn: null,
+    textColorCancelBtn: null,
     paintLayer: null,
     paintCtx: null,
     bgColor: BUBBLE_DRAW_DEFAULT_BG,
@@ -37,6 +42,7 @@ const BubbleComposer = {
     currentFriendName: null,
     pendingBlob: null,
     undoStack: [],
+    pendingTextColorResolve: null,
 };
 
 const ChatModule = {
@@ -51,6 +57,7 @@ const ChatModule = {
                 global: f.image,
                 special: friendMap.special || null,
                 bubble: friendMap.bubble || null,
+                text_color: friendMap.text_color || null,
             };
         });
 
@@ -60,6 +67,7 @@ const ChatModule = {
             global: State.currentUser.image,
             special: myMap.special || null,
             bubble: myMap.bubble || null,
+            text_color: myMap.text_color || null,
         };
     },
 
@@ -302,6 +310,29 @@ function getBubbleForSender(sender) {
     return null;
 }
 
+function getBubbleTextColorForSender(sender) {
+    const avatarMap = State.avatarMap || {};
+    const currentUser = State.currentUser || {};
+    const myId = String(currentUser.id || '');
+
+    if ((currentUser.name && sender === currentUser.name) || (myId && String(sender) === myId)) {
+        const meInfo = avatarMap[myId] || {};
+        return normalizeHexColor(meInfo.text_color);
+    }
+
+    const direct = avatarMap[String(sender)];
+    if (direct && direct.text_color) {
+        return normalizeHexColor(direct.text_color);
+    }
+
+    const friendObj = (State.friends || []).find(f => f.name === sender || String(f.id) === String(sender));
+    if (friendObj && avatarMap[String(friendObj.id)] && avatarMap[String(friendObj.id)].text_color) {
+        return normalizeHexColor(avatarMap[String(friendObj.id)].text_color);
+    }
+
+    return null;
+}
+
 function renderMessages() {
     const container = document.getElementById('messages-container');
     if (!State.messages.length) {
@@ -316,6 +347,7 @@ function renderMessages() {
         // avatar：从 avatar_map、friends 或默认中获取
         const avatarUrl = getAvatarForSender(msg.sender);
         const bubbleUrl = isImage ? null : getBubbleForSender(msg.sender);
+        const textColor = isImage ? null : getBubbleTextColorForSender(msg.sender);
 
         const senderDisplay = escapeHtml(msg.sender || '');
 
@@ -324,7 +356,7 @@ function renderMessages() {
             : escapeHtml(msg.content || '');
         const bubbleClass = bubbleUrl ? 'message-content message-content-custom-bubble' : 'message-content';
         const bubbleStyle = bubbleUrl
-            ? ` style="--bubble-image: url('${escapeUrlForCss(bubbleUrl)}');"`
+            ? ` style="--bubble-image: url('${escapeUrlForCss(bubbleUrl)}');${textColor ? ` --bubble-text-color: ${textColor}; color: ${textColor};` : ''}"`
             : '';
 
         return `
@@ -362,6 +394,23 @@ function escapeUrlForCss(url) {
         .replace(/\\/g, '\\\\')
         .replace(/'/g, "\\'")
         .replace(/"/g, '\\"');
+}
+
+function normalizeHexColor(color) {
+    if (!color) return null;
+    const value = String(color).trim();
+    if (!/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(value)) {
+        return null;
+    }
+    if (value.length === 4) {
+        return (
+            '#' +
+            value[1] + value[1] +
+            value[2] + value[2] +
+            value[3] + value[3]
+        ).toLowerCase();
+    }
+    return value.toLowerCase();
 }
 
 function resolveSelectedFriendName() {
@@ -447,6 +496,7 @@ function hideAllBubbleModals() {
     if (BubbleComposer.actionModal) BubbleComposer.actionModal.classList.add('hidden');
     if (BubbleComposer.drawModal) BubbleComposer.drawModal.classList.add('hidden');
     if (BubbleComposer.exportModal) BubbleComposer.exportModal.classList.add('hidden');
+    if (BubbleComposer.textColorModal) BubbleComposer.textColorModal.classList.add('hidden');
 }
 
 function openBubbleActionModal() {
@@ -474,6 +524,61 @@ function openBubbleExportModal() {
     if (BubbleComposer.exportModal) {
         BubbleComposer.exportModal.classList.remove('hidden');
     }
+}
+
+function updateBubbleTextColorPreview(color) {
+    if (!BubbleComposer.textColorPreview) return;
+    const normalized = normalizeHexColor(color) || '#111827';
+    const preview = BubbleComposer.textColorPreview;
+    preview.style.color = normalized;
+
+    const myId = String((State.currentUser && State.currentUser.id) || '');
+    const currentMap = (State.avatarMap && State.avatarMap[myId]) || {};
+    const bubbleUrl = currentMap.bubble || null;
+
+    if (bubbleUrl) {
+        preview.classList.add('bubble-text-color-preview-custom');
+        preview.classList.remove('bubble-text-color-preview-default');
+        preview.style.setProperty('--bubble-image', `url('${escapeUrlForCss(bubbleUrl)}')`);
+    } else {
+        preview.classList.remove('bubble-text-color-preview-custom');
+        preview.classList.add('bubble-text-color-preview-default');
+        preview.style.removeProperty('--bubble-image');
+    }
+}
+
+function closeBubbleTextColorModal(selectedColor) {
+    if (BubbleComposer.textColorModal) {
+        BubbleComposer.textColorModal.classList.add('hidden');
+    }
+    const resolve = BubbleComposer.pendingTextColorResolve;
+    BubbleComposer.pendingTextColorResolve = null;
+    if (resolve) {
+        resolve(selectedColor || null);
+    }
+}
+
+function openBubbleTextColorModal(initialColor) {
+    const normalized = normalizeHexColor(initialColor) || '#111827';
+    hideAllBubbleModals();
+    if (BubbleComposer.textColorModal) {
+        BubbleComposer.textColorModal.classList.remove('hidden');
+    }
+    if (BubbleComposer.textColorInput) {
+        BubbleComposer.textColorInput.value = normalized;
+    }
+    updateBubbleTextColorPreview(normalized);
+    if (BubbleComposer.textColorInput && typeof BubbleComposer.textColorInput.showPicker === 'function') {
+        try {
+            BubbleComposer.textColorInput.showPicker();
+        } catch (error) {
+            // ignore: some browsers require stricter user-activation timing
+        }
+    }
+
+    return new Promise((resolve) => {
+        BubbleComposer.pendingTextColorResolve = resolve;
+    });
 }
 
 function ensureBubblePainterLayer() {
@@ -727,6 +832,42 @@ async function uploadBubbleImageForFriend(imageFile, friendName) {
     return bubbleUrl;
 }
 
+async function setBubbleTextColorForFriend(friendName, color) {
+    const normalized = normalizeHexColor(color);
+    if (!normalized) {
+        throw new Error('字体颜色格式无效');
+    }
+
+    let data = null;
+    if (typeof API !== 'undefined' && typeof API.setFriendBubbleTextColor === 'function') {
+        data = await API.setFriendBubbleTextColor(friendName, normalized);
+    } else {
+        const response = await fetch('/friend/set_bubble_text_color', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ friend: friendName, color: normalized }),
+        });
+        data = await response.json();
+        if (!response.ok) {
+            throw new Error(data.error || `HTTP ${response.status}`);
+        }
+    }
+
+    const textColor = normalizeHexColor((data && (data.text_color || data.color)) || normalized) || normalized;
+    const myId = String(State.currentUser && State.currentUser.id);
+    if (!State.avatarMap) State.avatarMap = {};
+    if (!State.avatarMap[myId]) State.avatarMap[myId] = {};
+    State.avatarMap[myId].text_color = textColor;
+
+    renderMessages();
+    if (window.ChatModule && typeof window.ChatModule.refreshCurrentConversationAvatarMap === 'function') {
+        await window.ChatModule.refreshCurrentConversationAvatarMap();
+    }
+
+    return textColor;
+}
+
 async function finishBubbleDrawing(options) {
     const { saveLocal } = options || {};
     const friend = BubbleComposer.currentFriendName || resolveSelectedFriendName();
@@ -758,6 +899,7 @@ function initBubbleComposerUI() {
     BubbleComposer.actionModal = document.getElementById('bubble-action-modal');
     BubbleComposer.drawModal = document.getElementById('bubble-draw-modal');
     BubbleComposer.exportModal = document.getElementById('bubble-export-modal');
+    BubbleComposer.textColorModal = document.getElementById('bubble-text-color-modal');
     BubbleComposer.canvas = document.getElementById('bubble-draw-canvas');
     BubbleComposer.bgInput = document.getElementById('bubble-bg-color');
     BubbleComposer.lineInput = document.getElementById('bubble-line-color');
@@ -772,6 +914,10 @@ function initBubbleComposerUI() {
     BubbleComposer.exportUploadOnlyBtn = document.getElementById('bubble-upload-only-btn');
     BubbleComposer.exportUploadSaveBtn = document.getElementById('bubble-upload-save-local-btn');
     BubbleComposer.exportBackBtn = document.getElementById('bubble-export-back-btn');
+    BubbleComposer.textColorInput = document.getElementById('bubble-text-color-input');
+    BubbleComposer.textColorPreview = document.getElementById('bubble-text-color-preview');
+    BubbleComposer.textColorConfirmBtn = document.getElementById('bubble-text-color-confirm-btn');
+    BubbleComposer.textColorCancelBtn = document.getElementById('bubble-text-color-cancel-btn');
 
     if (!BubbleComposer.canvas) {
         return;
@@ -880,6 +1026,27 @@ function initBubbleComposerUI() {
         });
     }
 
+    if (BubbleComposer.textColorInput) {
+        BubbleComposer.textColorInput.addEventListener('input', (event) => {
+            updateBubbleTextColorPreview(event.target.value);
+        });
+    }
+
+    if (BubbleComposer.textColorConfirmBtn) {
+        BubbleComposer.textColorConfirmBtn.addEventListener('click', () => {
+            const selected = normalizeHexColor(
+                BubbleComposer.textColorInput && BubbleComposer.textColorInput.value
+            );
+            closeBubbleTextColorModal(selected);
+        });
+    }
+
+    if (BubbleComposer.textColorCancelBtn) {
+        BubbleComposer.textColorCancelBtn.addEventListener('click', () => {
+            closeBubbleTextColorModal(null);
+        });
+    }
+
     BubbleComposer.canvas.addEventListener('pointerdown', (event) => {
         if (event.button !== 0) return;
         event.preventDefault();
@@ -913,6 +1080,42 @@ window.chooseSpecialBubble = function () {
     }
     BubbleComposer.currentFriendName = friend;
     openBubbleActionModal();
+};
+
+window.chooseSpecialTextColor = async function () {
+    initBubbleComposerUI();
+    const friend = resolveSelectedFriendName();
+    if (!friend) {
+        alert("找不到当前好友，请先打开与好友的聊天窗口再设置专属文字颜色。");
+        return;
+    }
+
+    BubbleComposer.currentFriendName = friend;
+    const myId = String(State.currentUser && State.currentUser.id);
+    const initialColor = normalizeHexColor(
+        State.avatarMap &&
+        State.avatarMap[myId] &&
+        State.avatarMap[myId].text_color
+    ) || '#111827';
+
+    try {
+        const selectedColor = await openBubbleTextColorModal(initialColor);
+        if (!selectedColor) {
+            return;
+        }
+        await setBubbleTextColorForFriend(friend, selectedColor);
+        hideAllBubbleModals();
+        if (typeof showErrorToast === 'function') {
+            showErrorToast('专属文字颜色设置成功');
+        }
+    } catch (error) {
+        hideAllBubbleModals();
+        if (typeof showErrorToast === 'function') {
+            showErrorToast('设置专属文字颜色失败: ' + (error.message || error));
+        } else {
+            alert('设置专属文字颜色失败');
+        }
+    }
 };
 
 window.uploadSpecialBubble = async function () {

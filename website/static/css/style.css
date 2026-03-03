@@ -621,7 +621,12 @@ body {
     border-image-repeat: stretch;
     border-radius: 0;
     padding: 8px 10px;
-    color: var(--text-dark);
+    color: var(--bubble-text-color, var(--text-dark));
+}
+
+.message-item.mine .message-content.message-content-custom-bubble,
+.message-item.other .message-content.message-content-custom-bubble {
+    color: var(--bubble-text-color, var(--text-dark));
 }
 
 .message-avatar {
@@ -897,6 +902,50 @@ body {
     border-radius: 6px;
     touch-action: none;
     cursor: crosshair;
+}
+
+.bubble-text-color-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 14px;
+}
+
+.bubble-text-color-row input[type="color"] {
+    width: 40px;
+    height: 40px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 0;
+    background: none;
+    cursor: pointer;
+}
+
+.bubble-text-color-preview {
+    display: inline-block;
+    min-width: 120px;
+    text-align: center;
+    font-size: 14px;
+    line-height: 1.4;
+}
+
+.bubble-text-color-preview.bubble-text-color-preview-default {
+    padding: 8px 12px;
+    border-radius: 12px;
+    border-bottom-right-radius: 2px;
+    border: none;
+    background: var(--primary-color);
+}
+
+.bubble-text-color-preview.bubble-text-color-preview-custom {
+    padding: 8px 10px;
+    border: 16px solid transparent;
+    border-image-source: var(--bubble-image);
+    border-image-slice: 30 fill;
+    border-image-width: 16px;
+    border-image-repeat: stretch;
+    border-radius: 0;
+    background: transparent;
 }
 
 @keyframes slideUp {

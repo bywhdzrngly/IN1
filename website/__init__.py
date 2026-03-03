@@ -2,6 +2,7 @@ from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import UserMixin, LoginManager
 from werkzeug.security import generate_password_hash, check_password_hash
+from sqlalchemy import inspect, text
 import random
 import string
 
@@ -95,6 +96,8 @@ class Friendship(db.Model):
     image_by_user2 = db.Column(db.String(256), nullable=True)  # user2 设置的专属头像
     bubble1 = db.Column(db.String(256), nullable=True)  # user1 气泡
     bubble2 = db.Column(db.String(256), nullable=True)  # user2 气泡
+    bubble_text_color1 = db.Column(db.String(16), nullable=True)  # user1 文字颜色
+    bubble_text_color2 = db.Column(db.String(16), nullable=True)  # user2 文字颜色
 
     # 关联 User 对象，便于获取用户名等信息
     user1 = db.relationship('User', foreign_keys=[user1_id])
@@ -116,7 +119,35 @@ class Friendship(db.Model):
             "image_by_user2": self.image_by_user2,
             "bubble1": self.bubble1,
             "bubble2": self.bubble2,
+            "bubble_text_color1": self.bubble_text_color1,
+            "bubble_text_color2": self.bubble_text_color2,
         }
+
+
+def _ensure_friendship_columns():
+    """为旧数据库补充新增字段。"""
+    inspector = inspect(db.engine)
+    if 'friendship' not in inspector.get_table_names():
+        return
+
+    existing_columns = {col['name'] for col in inspector.get_columns('friendship')}
+    alter_sql = []
+
+    if 'bubble_text_color1' not in existing_columns:
+        alter_sql.append("ALTER TABLE friendship ADD COLUMN bubble_text_color1 VARCHAR(16)")
+    if 'bubble_text_color2' not in existing_columns:
+        alter_sql.append("ALTER TABLE friendship ADD COLUMN bubble_text_color2 VARCHAR(16)")
+
+    if not alter_sql:
+        return
+
+    try:
+        for sql in alter_sql:
+            db.session.execute(text(sql))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        raise
 
 
 def create_app():
@@ -146,6 +177,10 @@ def create_app():
         login_manager.login_view = 'views.main_page'
         login_manager.init_app(app)
         db.create_all()
+        try:
+            _ensure_friendship_columns()
+        except Exception as e:
+            print(f"ensure friendship columns failed: {e}")
         
         # 注册 /uploads 路由来提供上传的文件
         @app.route('/uploads/<path:filename>')

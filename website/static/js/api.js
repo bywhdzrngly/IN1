@@ -214,6 +214,16 @@ const API = {
     },
 
     /**
+     * 设置与某个好友会话的专属文字颜色
+     */
+    async setFriendBubbleTextColor(friendName, color) {
+        return this.request('POST', '/friend/set_bubble_text_color', {
+            friend: friendName,
+            color,
+        });
+    },
+
+    /**
      * ==================== 聊天相关 ====================
      */
 

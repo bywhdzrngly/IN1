@@ -158,6 +158,11 @@
                                 设置专属气泡
                             </button>
                         </form>
+                        <form id="specialTextColorForm" onsubmit="return false;">
+                            <button type="button" onclick="chooseSpecialTextColor()">
+                                设置专属文字颜色
+                            </button>
+                        </form>
                         <button id="delete-friend-btn" class="btn btn-danger btn-small">删除好友</button>
                     </div>
 
@@ -260,6 +265,22 @@
                 </div>
                 <div class="bubble-modal-footer">
                     <button id="bubble-export-back-btn" class="btn">返回绘制</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 专属文字颜色 -->
+        <div id="bubble-text-color-modal" class="bubble-modal hidden">
+            <div class="bubble-modal-panel">
+                <h3>设置专属文字颜色</h3>
+                <p class="bubble-modal-tip">选择颜色后点击完成，取消则不保存。</p>
+                <div class="bubble-text-color-row">
+                    <input type="color" id="bubble-text-color-input" value="#111827">
+                    <span id="bubble-text-color-preview" class="bubble-text-color-preview">示例文字</span>
+                </div>
+                <div class="bubble-modal-actions">
+                    <button id="bubble-text-color-confirm-btn" class="btn btn-primary">完成</button>
+                    <button id="bubble-text-color-cancel-btn" class="btn">取消</button>
                 </div>
             </div>
         </div>

@@ -5,10 +5,12 @@ from .__init__ import User, db, Conversation, Message, FriendRequest, Friendship
 from datetime import datetime
 import os
 import uuid
+import re
 from werkzeug.utils import secure_filename
 from sqlalchemy.exc import IntegrityError
 
 views = Blueprint("views", __name__)
+HEX_COLOR_RE = re.compile(r'^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$')
 
 
 def _user_room(username):
@@ -40,6 +42,17 @@ def _related_usernames_for_user(user):
             usernames.add(friendship.user2.name)
 
     return list(usernames)
+
+
+def _normalize_hex_color(value):
+    if value is None:
+        return None
+    color = str(value).strip()
+    if not HEX_COLOR_RE.match(color):
+        return None
+    if len(color) == 4:
+        color = "#" + "".join(ch * 2 for ch in color[1:])
+    return color.lower()
 
 '''
 路由(Route)本质是"URL 地址"与"后端处理函数"的映射关系,Flask 通过装饰器 @app.route() 来定义路由。比如 @app.route('/chat') 就是把 /chat 地址和 chat() 函数关联起来,当用户访问 /chat 时,就会执行 chat() 函数里的代码。
@@ -265,12 +278,14 @@ def get_or_create_conversation(username):
         str(me.id): {
             "global": me.image,
             "special": friendship.image_by_user1 if me.id == friendship.user1_id else friendship.image_by_user2,
-            "bubble": friendship.bubble1 if me.id == friendship.user1_id else friendship.bubble2
+            "bubble": friendship.bubble1 if me.id == friendship.user1_id else friendship.bubble2,
+            "text_color": friendship.bubble_text_color1 if me.id == friendship.user1_id else friendship.bubble_text_color2,
         },
         str(target.id): {
             "global": target.image,
             "special": friendship.image_by_user2 if me.id == friendship.user1_id else friendship.image_by_user1,
-            "bubble": friendship.bubble2 if me.id == friendship.user1_id else friendship.bubble1
+            "bubble": friendship.bubble2 if me.id == friendship.user1_id else friendship.bubble1,
+            "text_color": friendship.bubble_text_color2 if me.id == friendship.user1_id else friendship.bubble_text_color1,
         }
     }
 
@@ -634,6 +649,61 @@ def set_friend_bubble():
 
     _emit_friend_data_changed(current_user.name, target.name)
     return jsonify({"status": "ok", "image_url": image_url})
+
+
+@views.route('/friend/set_bubble_text_color', methods=['POST'])
+@login_required
+def set_friend_bubble_text_color():
+    data = request.get_json(silent=True) or {}
+    friend_param = data.get('friend')
+    if friend_param is None:
+        friend_param = request.form.get('friend')
+
+    color = data.get('color')
+    if color is None:
+        color = request.form.get('color')
+    if color is None:
+        color = data.get('text_color')
+    if color is None:
+        color = request.form.get('text_color')
+
+    if not friend_param:
+        return jsonify({"error": "missing friend"}), 400
+    if color is None:
+        return jsonify({"error": "missing color"}), 400
+
+    normalized_color = _normalize_hex_color(color)
+    if not normalized_color:
+        return jsonify({"error": "invalid color"}), 400
+
+    target = None
+    if str(friend_param).isdigit():
+        target = User.query.filter_by(id=int(friend_param)).first()
+    if not target:
+        target = User.query.filter_by(name=str(friend_param)).first()
+    if not target:
+        return jsonify({"error": "user not found"}), 404
+
+    user1_id = min(current_user.id, target.id)
+    user2_id = max(current_user.id, target.id)
+    friendship = Friendship.query.filter_by(user1_id=user1_id, user2_id=user2_id).first()
+    if not friendship:
+        return jsonify({"error": "not friends"}), 403
+
+    if current_user.id == friendship.user1_id:
+        friendship.bubble_text_color1 = normalized_color
+    else:
+        friendship.bubble_text_color2 = normalized_color
+
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("set_friend_bubble_text_color database error")
+        return jsonify({"error": "database error"}), 500
+
+    _emit_friend_data_changed(current_user.name, target.name)
+    return jsonify({"status": "ok", "text_color": normalized_color})
 
 @views.route('/users', methods=['GET'])
 @login_required
