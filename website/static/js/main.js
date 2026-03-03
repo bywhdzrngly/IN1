@@ -133,7 +133,7 @@ async function bootstrapApp() {
     }
 
     const originalSetLoading = State.setLoading.bind(State);
-    State.setLoading = function(loading) {
+    State.setLoading = function (loading) {
         originalSetLoading(loading);
         updateLoadingIndicator();
     };
