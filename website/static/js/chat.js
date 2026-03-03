@@ -5,6 +5,7 @@
 const DEFAULT_AVATAR_DATA_URI = 'data:image/svg+xml,%3Csvg%20xmlns%3D%22http://www.w3.org/2000/svg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22currentColor%22%3E%3Ccircle%20cx%3D%2212%22%20cy%3D%2212%22%20r%3D%2210%22/%3E%3Cpath%20d%3D%22M12%2012c2.21%200%204-1.79%204-4s-1.79-4-4-4-4%201.79-4%204%201.79%204%204%204zm0%202c-2.67%200-8%201.34-8%204v2h16v-2c0-2.66-5.33-4-8-4z%22/%3E%3C/svg%3E';
 const BUBBLE_DRAW_DEFAULT_BG = '#ffffff';
 const BUBBLE_DRAW_DEFAULT_LINE = '#1f2937';
+const BUBBLE_DRAW_DEFAULT_FILL = '#22c55e';
 
 const BubbleComposer = {
     initialized: false,
@@ -24,6 +25,8 @@ const BubbleComposer = {
     drawDoneBtn: null,
     drawUndoBtn: null,
     drawClearBtn: null,
+    fillBtn: null,
+    fillColorInput: null,
     exportUploadOnlyBtn: null,
     exportUploadSaveBtn: null,
     exportBackBtn: null,
@@ -35,7 +38,9 @@ const BubbleComposer = {
     paintCtx: null,
     bgColor: BUBBLE_DRAW_DEFAULT_BG,
     lineColor: BUBBLE_DRAW_DEFAULT_LINE,
+    fillColor: BUBBLE_DRAW_DEFAULT_FILL,
     lineWidth: 4,
+    toolMode: 'draw',
     isDrawing: false,
     lastX: 0,
     lastY: 0,
@@ -346,7 +351,7 @@ function renderMessages() {
 
         // avatar：从 avatar_map、friends 或默认中获取
         const avatarUrl = getAvatarForSender(msg.sender);
-        const bubbleUrl = isImage ? null : getBubbleForSender(msg.sender);
+        const bubbleUrl = getBubbleForSender(msg.sender);
         const textColor = isImage ? null : getBubbleTextColorForSender(msg.sender);
 
         const senderDisplay = escapeHtml(msg.sender || '');
@@ -354,7 +359,9 @@ function renderMessages() {
         const contentHtml = isImage
             ? `<img src="${msg.content}" alt="图片消息" class="message-image">`
             : escapeHtml(msg.content || '');
-        const bubbleClass = bubbleUrl ? 'message-content message-content-custom-bubble' : 'message-content';
+        const bubbleClass = bubbleUrl
+            ? `message-content message-content-custom-bubble${isImage ? ' message-content-custom-bubble-image' : ''}`
+            : 'message-content';
         const bubbleStyle = bubbleUrl
             ? ` style="--bubble-image: url('${escapeUrlForCss(bubbleUrl)}');${textColor ? ` --bubble-text-color: ${textColor}; color: ${textColor};` : ''}"`
             : '';
@@ -655,6 +662,27 @@ function renderBubbleComposerCanvas() {
     drawBubbleNineSliceGuide(ctx, canvas.width, canvas.height);
 }
 
+function setBubbleToolMode(mode) {
+    BubbleComposer.toolMode = mode === 'fill' ? 'fill' : 'draw';
+    if (BubbleComposer.fillBtn) {
+        BubbleComposer.fillBtn.classList.toggle('bubble-tool-active', BubbleComposer.toolMode === 'fill');
+    }
+    if (BubbleComposer.canvas) {
+        BubbleComposer.canvas.style.cursor = BubbleComposer.toolMode === 'fill' ? 'cell' : 'crosshair';
+    }
+}
+
+function hexToRgba(hexColor, alpha) {
+    const normalized = normalizeHexColor(hexColor);
+    if (!normalized) return [34, 197, 94, alpha];
+    return [
+        parseInt(normalized.slice(1, 3), 16),
+        parseInt(normalized.slice(3, 5), 16),
+        parseInt(normalized.slice(5, 7), 16),
+        alpha,
+    ];
+}
+
 function updateBubbleUndoButtonState() {
     if (!BubbleComposer.drawUndoBtn) return;
     BubbleComposer.drawUndoBtn.disabled = BubbleComposer.undoStack.length === 0;
@@ -694,14 +722,17 @@ function resetBubbleComposerCanvas() {
     ensureBubblePainterLayer();
     BubbleComposer.bgColor = BUBBLE_DRAW_DEFAULT_BG;
     BubbleComposer.lineColor = BUBBLE_DRAW_DEFAULT_LINE;
+    BubbleComposer.fillColor = BUBBLE_DRAW_DEFAULT_FILL;
     if (BubbleComposer.bgInput) BubbleComposer.bgInput.value = BubbleComposer.bgColor;
     if (BubbleComposer.lineInput) BubbleComposer.lineInput.value = BubbleComposer.lineColor;
+    if (BubbleComposer.fillColorInput) BubbleComposer.fillColorInput.value = BubbleComposer.fillColor;
     if (BubbleComposer.paintCtx && BubbleComposer.paintLayer) {
         BubbleComposer.paintCtx.clearRect(0, 0, BubbleComposer.paintLayer.width, BubbleComposer.paintLayer.height);
     }
     BubbleComposer.pendingBlob = null;
     BubbleComposer.undoStack = [];
     BubbleComposer.isDrawing = false;
+    setBubbleToolMode('draw');
     updateBubbleUndoButtonState();
     renderBubbleComposerCanvas();
 }
@@ -719,6 +750,7 @@ function getCanvasPoint(event) {
 function startBubbleDrawing(event) {
     if (!BubbleComposer.paintCtx) return;
     pushBubbleUndoSnapshot();
+    setBubbleToolMode('draw');
     BubbleComposer.isDrawing = true;
     const p = getCanvasPoint(event);
     BubbleComposer.lastX = p.x;
@@ -749,6 +781,86 @@ function continueBubbleDrawing(event) {
 
 function stopBubbleDrawing() {
     BubbleComposer.isDrawing = false;
+}
+
+function fillBubbleComposerAtPoint(x, y) {
+    const { paintCtx, paintLayer } = BubbleComposer;
+    if (!paintCtx || !paintLayer) return false;
+
+    const width = paintLayer.width;
+    const height = paintLayer.height;
+    const startX = Math.floor(x);
+    const startY = Math.floor(y);
+
+    if (startX < 0 || startX >= width || startY < 0 || startY >= height) {
+        return false;
+    }
+
+    let imageData;
+    try {
+        imageData = paintCtx.getImageData(0, 0, width, height);
+    } catch (error) {
+        console.warn('读取画布像素失败:', error);
+        return false;
+    }
+
+    const data = imageData.data;
+    const startOffset = (startY * width + startX) * 4;
+    const targetR = data[startOffset];
+    const targetG = data[startOffset + 1];
+    const targetB = data[startOffset + 2];
+    const targetA = data[startOffset + 3];
+    const [fillR, fillG, fillB, fillA] = hexToRgba(BubbleComposer.fillColor, 255);
+
+    if (
+        targetR === fillR &&
+        targetG === fillG &&
+        targetB === fillB &&
+        targetA === fillA
+    ) {
+        return false;
+    }
+
+    pushBubbleUndoSnapshot();
+
+    const stack = [[startX, startY]];
+    const visited = new Uint8Array(width * height);
+
+    while (stack.length) {
+        const point = stack.pop();
+        const px = point[0];
+        const py = point[1];
+
+        if (px < 0 || py < 0 || px >= width || py >= height) continue;
+
+        const pixelIndex = py * width + px;
+        if (visited[pixelIndex]) continue;
+        visited[pixelIndex] = 1;
+
+        const idx = pixelIndex * 4;
+        if (
+            data[idx] !== targetR ||
+            data[idx + 1] !== targetG ||
+            data[idx + 2] !== targetB ||
+            data[idx + 3] !== targetA
+        ) {
+            continue;
+        }
+
+        data[idx] = fillR;
+        data[idx + 1] = fillG;
+        data[idx + 2] = fillB;
+        data[idx + 3] = fillA;
+
+        stack.push([px + 1, py]);
+        stack.push([px - 1, py]);
+        stack.push([px, py + 1]);
+        stack.push([px, py - 1]);
+    }
+
+    paintCtx.putImageData(imageData, 0, 0);
+    renderBubbleComposerCanvas();
+    return true;
 }
 
 function exportBubbleCanvasBlob() {
@@ -911,6 +1023,8 @@ function initBubbleComposerUI() {
     BubbleComposer.drawDoneBtn = document.getElementById('bubble-draw-done-btn');
     BubbleComposer.drawUndoBtn = document.getElementById('bubble-undo-btn');
     BubbleComposer.drawClearBtn = document.getElementById('bubble-clear-btn');
+    BubbleComposer.fillBtn = document.getElementById('bubble-fill-btn');
+    BubbleComposer.fillColorInput = document.getElementById('bubble-fill-color');
     BubbleComposer.exportUploadOnlyBtn = document.getElementById('bubble-upload-only-btn');
     BubbleComposer.exportUploadSaveBtn = document.getElementById('bubble-upload-save-local-btn');
     BubbleComposer.exportBackBtn = document.getElementById('bubble-export-back-btn');
@@ -980,6 +1094,21 @@ function initBubbleComposerUI() {
     if (BubbleComposer.lineInput) {
         BubbleComposer.lineInput.addEventListener('input', (event) => {
             BubbleComposer.lineColor = event.target.value || BUBBLE_DRAW_DEFAULT_LINE;
+            setBubbleToolMode('draw');
+        });
+    }
+
+    if (BubbleComposer.fillColorInput) {
+        BubbleComposer.fillColorInput.addEventListener('click', () => {
+            setBubbleToolMode('fill');
+        });
+        BubbleComposer.fillColorInput.addEventListener('input', (event) => {
+            BubbleComposer.fillColor = event.target.value || BUBBLE_DRAW_DEFAULT_FILL;
+            setBubbleToolMode('fill');
+        });
+        BubbleComposer.fillColorInput.addEventListener('change', (event) => {
+            BubbleComposer.fillColor = event.target.value || BUBBLE_DRAW_DEFAULT_FILL;
+            setBubbleToolMode('fill');
         });
     }
 
@@ -1050,6 +1179,11 @@ function initBubbleComposerUI() {
     BubbleComposer.canvas.addEventListener('pointerdown', (event) => {
         if (event.button !== 0) return;
         event.preventDefault();
+        if (BubbleComposer.toolMode === 'fill') {
+            const point = getCanvasPoint(event);
+            fillBubbleComposerAtPoint(point.x, point.y);
+            return;
+        }
         BubbleComposer.canvas.setPointerCapture(event.pointerId);
         startBubbleDrawing(event);
     });

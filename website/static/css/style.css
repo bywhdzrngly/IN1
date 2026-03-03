@@ -626,7 +626,28 @@ body {
 
 .message-item.mine .message-content.message-content-custom-bubble,
 .message-item.other .message-content.message-content-custom-bubble {
-    color: var(--bubble-text-color, var(--text-dark));
+    background: transparent !important;
+    background-color: transparent !important;
+    border-radius: 0 !important;
+    border-bottom-right-radius: 0 !important;
+    border-bottom-left-radius: 0 !important;
+    color: var(--bubble-text-color, var(--text-dark)) !important;
+}
+
+.message-content.message-content-custom-bubble.message-content-custom-bubble-image {
+    /* 图片消息：边框九宫格拉伸，中心区域用于显示消息图片 */
+    border-image-slice: 30 fill;
+    padding: 8px;
+    color: inherit;
+}
+
+.message-content.message-content-custom-bubble.message-content-custom-bubble-image .message-image {
+    display: block;
+    width: auto;
+    max-width: min(320px, 100%);
+    max-height: 300px;
+    border-radius: 6px;
+    margin: 0 auto;
 }
 
 .message-avatar {
@@ -880,6 +901,32 @@ body {
     border-radius: 6px;
     padding: 0;
     background: none;
+    cursor: pointer;
+}
+
+.bubble-tool-active {
+    background-color: var(--primary-color);
+    color: white;
+    border-color: var(--primary-color);
+}
+
+.bubble-tool-active:hover {
+    background-color: var(--primary-hover);
+}
+
+.bubble-fill-tool {
+    position: relative;
+    display: inline-flex;
+}
+
+.bubble-fill-color-proxy {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    border: 0;
+    padding: 0;
     cursor: pointer;
 }
 
