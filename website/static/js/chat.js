@@ -21,6 +21,7 @@ const BubbleComposer = {
     actionCancelBtn: null,
     drawCancelBtn: null,
     drawDoneBtn: null,
+    drawUndoBtn: null,
     drawClearBtn: null,
     exportUploadOnlyBtn: null,
     exportUploadSaveBtn: null,
@@ -35,6 +36,7 @@ const BubbleComposer = {
     lastY: 0,
     currentFriendName: null,
     pendingBlob: null,
+    undoStack: [],
 };
 
 const ChatModule = {
@@ -527,6 +529,41 @@ function renderBubbleComposerCanvas() {
     drawBubbleNineSliceGuide(ctx, canvas.width, canvas.height);
 }
 
+function updateBubbleUndoButtonState() {
+    if (!BubbleComposer.drawUndoBtn) return;
+    BubbleComposer.drawUndoBtn.disabled = BubbleComposer.undoStack.length === 0;
+}
+
+function pushBubbleUndoSnapshot() {
+    const { paintCtx, paintLayer } = BubbleComposer;
+    if (!paintCtx || !paintLayer) return;
+
+    try {
+        const snapshot = paintCtx.getImageData(0, 0, paintLayer.width, paintLayer.height);
+        BubbleComposer.undoStack.push(snapshot);
+        if (BubbleComposer.undoStack.length > 50) {
+            BubbleComposer.undoStack.shift();
+        }
+        updateBubbleUndoButtonState();
+    } catch (error) {
+        console.warn('保存撤回快照失败:', error);
+    }
+}
+
+function undoBubbleComposerStroke() {
+    const { paintCtx, paintLayer } = BubbleComposer;
+    if (!paintCtx || !paintLayer) return;
+    if (!BubbleComposer.undoStack.length) return;
+
+    const snapshot = BubbleComposer.undoStack.pop();
+    paintCtx.clearRect(0, 0, paintLayer.width, paintLayer.height);
+    if (snapshot) {
+        paintCtx.putImageData(snapshot, 0, 0);
+    }
+    updateBubbleUndoButtonState();
+    renderBubbleComposerCanvas();
+}
+
 function resetBubbleComposerCanvas() {
     ensureBubblePainterLayer();
     BubbleComposer.bgColor = BUBBLE_DRAW_DEFAULT_BG;
@@ -537,7 +574,9 @@ function resetBubbleComposerCanvas() {
         BubbleComposer.paintCtx.clearRect(0, 0, BubbleComposer.paintLayer.width, BubbleComposer.paintLayer.height);
     }
     BubbleComposer.pendingBlob = null;
+    BubbleComposer.undoStack = [];
     BubbleComposer.isDrawing = false;
+    updateBubbleUndoButtonState();
     renderBubbleComposerCanvas();
 }
 
@@ -553,6 +592,7 @@ function getCanvasPoint(event) {
 
 function startBubbleDrawing(event) {
     if (!BubbleComposer.paintCtx) return;
+    pushBubbleUndoSnapshot();
     BubbleComposer.isDrawing = true;
     const p = getCanvasPoint(event);
     BubbleComposer.lastX = p.x;
@@ -706,6 +746,7 @@ function initBubbleComposerUI() {
     BubbleComposer.actionCancelBtn = document.getElementById('bubble-action-cancel-btn');
     BubbleComposer.drawCancelBtn = document.getElementById('bubble-draw-cancel-btn');
     BubbleComposer.drawDoneBtn = document.getElementById('bubble-draw-done-btn');
+    BubbleComposer.drawUndoBtn = document.getElementById('bubble-undo-btn');
     BubbleComposer.drawClearBtn = document.getElementById('bubble-clear-btn');
     BubbleComposer.exportUploadOnlyBtn = document.getElementById('bubble-upload-only-btn');
     BubbleComposer.exportUploadSaveBtn = document.getElementById('bubble-upload-save-local-btn');
@@ -749,9 +790,16 @@ function initBubbleComposerUI() {
     if (BubbleComposer.drawClearBtn) {
         BubbleComposer.drawClearBtn.addEventListener('click', () => {
             if (BubbleComposer.paintCtx && BubbleComposer.paintLayer) {
+                pushBubbleUndoSnapshot();
                 BubbleComposer.paintCtx.clearRect(0, 0, BubbleComposer.paintLayer.width, BubbleComposer.paintLayer.height);
             }
             renderBubbleComposerCanvas();
+        });
+    }
+
+    if (BubbleComposer.drawUndoBtn) {
+        BubbleComposer.drawUndoBtn.addEventListener('click', () => {
+            undoBubbleComposerStroke();
         });
     }
 
