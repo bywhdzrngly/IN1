@@ -6,6 +6,7 @@ from . import db
 from .__init__ import User
 import os
 import uuid
+from werkzeug.utils import secure_filename
 # uuid:生成唯一标识符的库
 
 auth = Blueprint('auth', __name__)
@@ -16,8 +17,15 @@ def upload_image_local(file, upload_folder):
     """保存图片到本地uploads文件夹"""
     if not file or file.filename == '':
         return None
+    # 清洗文件名，避免 ? 等特殊字符导致 URL 404
+    original_name = file.filename or ''
+    safe_name = secure_filename(original_name)
+    if not safe_name:
+        ext = os.path.splitext(original_name)[1]
+        safe_name = f"upload{ext}" if ext else "upload"
+
     # 生成唯一文件名
-    filename = f"{uuid.uuid4().hex}_{file.filename}"
+    filename = f"{uuid.uuid4().hex}_{safe_name}"
     file_path = os.path.join(upload_folder, filename)
     file.save(file_path)
     # 返回本地访问路径

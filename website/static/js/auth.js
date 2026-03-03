@@ -15,6 +15,13 @@ const AuthModule = {
         signupForm.addEventListener('submit', (e) => this.handleSignup(e));
 
         document.getElementById('logout-btn').addEventListener('click', () => this.handleLogout());
+
+        const userNameEl = document.getElementById('user-name');
+        if (userNameEl) {
+            userNameEl.style.cursor = 'pointer';
+            userNameEl.title = '点击修改账号名';
+            userNameEl.addEventListener('click', () => this.handleChangeUserName());
+        }
     },
 
     /**
@@ -136,6 +143,60 @@ const AuthModule = {
     },
 
     /**
+     * 修改账号名
+     */
+    async handleChangeUserName() {
+        const currentName = (State.currentUser && State.currentUser.name) || '';
+        const input = window.prompt('请输入新账号名', currentName);
+
+        if (input === null) {
+            return; // 用户点击取消
+        }
+
+        const newName = input.trim();
+        if (!newName) {
+            showErrorToast('账号名不能为空');
+            return;
+        }
+
+        try {
+            State.setLoading(true);
+            const result = await API.updateUserName(newName);
+            const updatedName = (result && result.name) ? result.name : newName;
+
+            State.setCurrentUser({ name: updatedName });
+            this.displayUserInfo(State.currentUser);
+
+            // 本地已加载消息里仍是旧 sender 时，立即同步，避免头像/归属判断短暂异常
+            if (Array.isArray(State.messages) && currentName && currentName !== updatedName) {
+                State.setMessages(
+                    State.messages.map((msg) =>
+                        msg && msg.sender === currentName
+                            ? { ...msg, sender: updatedName }
+                            : msg
+                    )
+                );
+                if (typeof window.renderMessages === 'function') {
+                    window.renderMessages();
+                }
+            }
+
+            // 重新拉取一次用户相关数据，保持搜索/好友等状态一致
+            await this.loadUserData();
+
+            // 改名后重新连接，确保加入新用户名对应的 socket room
+            SocketManager.disconnect();
+            SocketManager.init();
+
+            showErrorToast('账号名修改成功');
+        } catch (error) {
+            showErrorToast('修改账号名失败: ' + error.message);
+        } finally {
+            State.setLoading(false);
+        }
+    },
+
+    /**
      * 加载用户数据
      */
     async loadUserData() {
@@ -230,6 +291,9 @@ const AuthModule = {
         return re.test(email);
     },
 };
+
+// 供 main.js 中的会话恢复逻辑通过 window.AuthModule 访问
+window.AuthModule = AuthModule;
 
 /**
  * 全局函数：切换认证表单

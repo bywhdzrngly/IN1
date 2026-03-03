@@ -115,6 +115,13 @@ const API = {
     },
 
     /**
+     * 修改当前用户账号名
+     */
+    async updateUserName(name) {
+        return this.request('POST', '/user/name', { name });
+    },
+
+    /**
      * 登出
      */
     async logout() {

@@ -150,8 +150,19 @@ def create_app():
         # 注册 /uploads 路由来提供上传的文件
         @app.route('/uploads/<filename>')
         def uploaded_file(filename):
-            from flask import send_from_directory
-            return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
+            from flask import send_from_directory, request
+            from werkzeug.exceptions import NotFound
+
+            upload_folder = app.config['UPLOAD_FOLDER']
+            try:
+                return send_from_directory(upload_folder, filename)
+            except NotFound:
+                # 兼容历史坏链接：文件名含 ? 时会被浏览器当作 query 截断
+                raw_qs = request.query_string.decode('utf-8', errors='ignore')
+                if raw_qs:
+                    legacy_name = f"{filename}?{raw_qs}"
+                    return send_from_directory(upload_folder, legacy_name)
+                raise
 
         @login_manager.user_loader
         def load_user(user_id):

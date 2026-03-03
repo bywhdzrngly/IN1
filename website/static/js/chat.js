@@ -2,15 +2,17 @@
  * 聊天模块
  */
 
+const DEFAULT_AVATAR_DATA_URI = 'data:image/svg+xml,%3Csvg%20xmlns%3D%22http://www.w3.org/2000/svg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22currentColor%22%3E%3Ccircle%20cx%3D%2212%22%20cy%3D%2212%22%20r%3D%2210%22/%3E%3Cpath%20d%3D%22M12%2012c2.21%200%204-1.79%204-4s-1.79-4-4-4-4%201.79-4%204%201.79%204%204%204zm0%202c-2.67%200-8%201.34-8%204v2h16v-2c0-2.66-5.33-4-8-4z%22/%3E%3C/svg%3E';
+
 const ChatModule = {
     rebuildAvatarMap(conversation) {
+        const conversationAvatarMap = conversation.avatar_map || conversation.map || {};
         State.avatarMap = {};
 
         (State.friends || []).forEach(f => {
             const special =
-                conversation.avatar_map &&
-                conversation.avatar_map[String(f.id)]
-                    ? conversation.avatar_map[String(f.id)].special
+                conversationAvatarMap[String(f.id)]
+                    ? conversationAvatarMap[String(f.id)].special
                     : null;
 
             State.avatarMap[String(f.id)] = {
@@ -20,9 +22,8 @@ const ChatModule = {
         });
 
         const mySpecial =
-            conversation.avatar_map &&
-            conversation.avatar_map[String(State.currentUser.id)]
-                ? conversation.avatar_map[String(State.currentUser.id)].special
+            conversationAvatarMap[String(State.currentUser.id)]
+                ? conversationAvatarMap[String(State.currentUser.id)].special
                 : null;
 
         State.avatarMap[String(State.currentUser.id)] = {
@@ -75,7 +76,7 @@ const ChatModule = {
         if (avatar && avatar.special) {
             return avatar.special;
         }
-        return avatar ? avatar.global : '/static/images/default-avatar.png';
+        return avatar ? avatar.global : DEFAULT_AVATAR_DATA_URI;
     },
 
     renderChatHeader(friendName) {
@@ -89,7 +90,7 @@ const ChatModule = {
 
         nameEl.textContent = friendName;
         const convId = (typeof State !== 'undefined' && State.currentConversationId) ? State.currentConversationId : null;
-        const avatarUrl = friend ? ChatModule.getAvatarForUserId(friend.id, convId) : '/static/images/default-avatar.png';
+        const avatarUrl = friend ? ChatModule.getAvatarForUserId(friend.id, convId) : DEFAULT_AVATAR_DATA_URI;
         avatarEl.src = avatarUrl;
         statusEl.textContent = State.socketConnected ? '在线' : '离线';
 
@@ -216,24 +217,34 @@ function getAvatarForSender(sender) {
     // sender 可能是用户名，也可能是 user id（数字或字符串）
     // 优先使用 State.avatarMap（后端返回的会话级映射）
     const avatarMap = State.avatarMap || {};
+    const currentUser = State.currentUser || {};
+    const myId = String(currentUser.id || '');
+
+    // 当前用户自己的消息：直接用自己的会话头像规则（专属 > 全局）
+    if ((currentUser.name && sender === currentUser.name) || (myId && String(sender) === myId)) {
+        const meInfo = avatarMap[myId] || {};
+        return (meInfo.special && meInfo.special.length)
+            ? meInfo.special
+            : (meInfo.global || currentUser.image || DEFAULT_AVATAR_DATA_URI);
+    }
 
     // 若 sender 是数字字符串或数字直接查
     if (avatarMap[String(sender)]) {
         const info = avatarMap[String(sender)];
-        return (info.special && info.special.length) ? info.special : (info.global || '/static/images/default-avatar.png');
+        return (info.special && info.special.length) ? info.special : (info.global || DEFAULT_AVATAR_DATA_URI);
     }
 
     // 否则尝试把 sender 当作用户名，找出对应 id（State.friends 有 id & name）
     const friendObj = (State.friends || []).find(f => f.name === sender || String(f.id) === String(sender));
     if (friendObj && avatarMap[String(friendObj.id)]) {
         const info = avatarMap[String(friendObj.id)];
-        return (info.special && info.special.length) ? info.special : (info.global || '/static/images/default-avatar.png');
+        return (info.special && info.special.length) ? info.special : (info.global || DEFAULT_AVATAR_DATA_URI);
     }
 
     // 最后退回到 friend 列表里存的 image 字段（如果有），否则默认
     if (friendObj && friendObj.image) return friendObj.image;
 
-    return '/static/images/default-avatar.png';
+    return DEFAULT_AVATAR_DATA_URI;
 }
 
 function renderMessages() {

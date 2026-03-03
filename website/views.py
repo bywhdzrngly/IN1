@@ -5,6 +5,8 @@ from .__init__ import User, db, Conversation, Message, FriendRequest, Friendship
 from datetime import datetime
 import os
 import uuid
+from werkzeug.utils import secure_filename
+from sqlalchemy.exc import IntegrityError
 
 views = Blueprint("views", __name__)
 
@@ -57,8 +59,15 @@ def upload_image_local(file, upload_folder):
     """保存图片到本地uploads文件夹"""
     if not file or file.filename == '':
         return None
+    # 清洗文件名，避免 ? 等特殊字符导致 URL 404
+    original_name = file.filename or ''
+    safe_name = secure_filename(original_name)
+    if not safe_name:
+        ext = os.path.splitext(original_name)[1]
+        safe_name = f"upload{ext}" if ext else "upload"
+
     # 生成唯一文件名
-    filename = f"{uuid.uuid4().hex}_{file.filename}"
+    filename = f"{uuid.uuid4().hex}_{safe_name}"
     file_path = os.path.join(upload_folder, filename)
     file.save(file_path)
     # 返回本地访问路径
@@ -95,6 +104,78 @@ def get_current_user():
         "email": current_user.email,
         "image": current_user.image,
     })
+
+
+@views.route('/user/name', methods=['POST'])
+def update_user_name():
+    if not current_user.is_authenticated:
+        return jsonify({"error": "unauthorized"}), 401
+
+    data = request.get_json(silent=True) or {}
+    new_name = data.get('name')
+    if new_name is None:
+        new_name = request.form.get('name')
+
+    if new_name is None:
+        return jsonify({"error": "missing new name"}), 400
+
+    new_name = str(new_name).strip()
+    if not new_name:
+        return jsonify({"error": "name cannot be empty"}), 400
+
+    user = User.query.get(current_user.id)
+    if not user:
+        return jsonify({"error": "user not found"}), 404
+
+    old_name = user.name
+    if new_name == old_name:
+        return jsonify({"status": "ok", "name": new_name})
+
+    exists = User.query.filter(User.name == new_name, User.id != user.id).first()
+    if exists:
+        return jsonify({"error": "username already taken"}), 400
+
+    try:
+        user.name = new_name
+
+        # 级联更新依赖用户名的历史数据，避免改名后数据断链
+        Conversation.query.filter_by(user1=old_name).update(
+            {Conversation.user1: new_name},
+            synchronize_session=False,
+        )
+        Conversation.query.filter_by(user2=old_name).update(
+            {Conversation.user2: new_name},
+            synchronize_session=False,
+        )
+        Message.query.filter_by(sender=old_name).update(
+            {Message.sender: new_name},
+            synchronize_session=False,
+        )
+        FriendRequest.query.filter_by(from_user=old_name).update(
+            {FriendRequest.from_user: new_name},
+            synchronize_session=False,
+        )
+        FriendRequest.query.filter_by(to_user=old_name).update(
+            {FriendRequest.to_user: new_name},
+            synchronize_session=False,
+        )
+
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({"error": "username already taken"}), 400
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("update_user_name database error")
+        return jsonify({"error": "database error"}), 500
+
+    try:
+        # old_name 用于兼容当前已连接但仍在旧房间的会话
+        _emit_friend_data_changed(old_name, *_related_usernames_for_user(user))
+    except Exception:
+        current_app.logger.exception("emit friendDataChanged failed after username update")
+
+    return jsonify({"status": "ok", "name": new_name})
 
 
 @views.route('/user/avatar', methods=['POST'])
@@ -174,6 +255,8 @@ def get_or_create_conversation(username):
     }
 
     conversation_data = conv.getJsonData()
+    # 兼容前端历史字段名：avatar_map（当前使用）与 map（旧字段）
+    conversation_data['avatar_map'] = avatar_and_bubble_map
     conversation_data['map'] = avatar_and_bubble_map
 
     return jsonify(conversation_data)
