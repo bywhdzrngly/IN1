@@ -148,7 +148,7 @@ def create_app():
         db.create_all()
         
         # 注册 /uploads 路由来提供上传的文件
-        @app.route('/uploads/<filename>')
+        @app.route('/uploads/<path:filename>')
         def uploaded_file(filename):
             from flask import send_from_directory, request
             from werkzeug.exceptions import NotFound

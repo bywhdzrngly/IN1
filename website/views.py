@@ -74,6 +74,26 @@ def upload_image_local(file, upload_folder):
     return f"/uploads/{filename}"
 
 
+def upload_bubble_local(file, upload_folder):
+    """保存气泡图片到 uploads/bubbles 并返回可访问路径"""
+    if not file or file.filename == '':
+        return None
+
+    bubble_folder = os.path.join(upload_folder, 'bubbles')
+    os.makedirs(bubble_folder, exist_ok=True)
+
+    original_name = file.filename or ''
+    safe_name = secure_filename(original_name)
+    if not safe_name:
+        ext = os.path.splitext(original_name)[1]
+        safe_name = f"bubble{ext}" if ext else "bubble"
+
+    filename = f"{uuid.uuid4().hex}_{safe_name}"
+    file_path = os.path.join(bubble_folder, filename)
+    file.save(file_path)
+    return f"/uploads/bubbles/{filename}"
+
+
 @views.route("/")
 @login_required
 def index():
@@ -572,13 +592,19 @@ def set_friend_avatar():
 @views.route('/friend/set_bubble', methods=['POST'])
 @login_required
 def set_friend_bubble():
-    friend_name = request.form.get('friend')
+    friend_param = request.form.get('friend')
     image = request.files.get('image')
 
-    if not friend_name or not image:
+    if not friend_param or not image:
         return jsonify({"error": "Missing friend or image"}), 400
 
-    target = User.query.filter_by(name=friend_name).first()
+    # Accept either numeric id or username
+    target = None
+    if friend_param.isdigit():
+        target = User.query.filter_by(id=int(friend_param)).first()
+    if not target:
+        target = User.query.filter_by(name=friend_param).first()
+
     if not target:
         return jsonify({"error": "User not found"}), 404
 
@@ -589,8 +615,7 @@ def set_friend_bubble():
     if not friendship:
         return jsonify({"error": "Not friends"}), 403
 
-    from flask import current_app
-    image_url = upload_image_local(image, current_app.config['UPLOAD_FOLDER'])
+    image_url = upload_bubble_local(image, current_app.config['UPLOAD_FOLDER'])
     if not image_url:
         return jsonify({"error": "Upload failed"}), 500
 
@@ -600,7 +625,14 @@ def set_friend_bubble():
     else:
         friendship.bubble2 = image_url
 
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("set_friend_bubble database error")
+        return jsonify({"error": "database error"}), 500
+
+    _emit_friend_data_changed(current_user.name, target.name)
     return jsonify({"status": "ok", "image_url": image_url})
 
 @views.route('/users', methods=['GET'])

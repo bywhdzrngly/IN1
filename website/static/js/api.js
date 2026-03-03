@@ -204,6 +204,16 @@ const API = {
     },
 
     /**
+     * 设置与某个好友的专属聊天气泡
+     */
+    async setFriendBubble(friendName, imageFile) {
+        const formData = new FormData();
+        formData.append('friend', friendName);
+        formData.append('image', imageFile);
+        return this.request('POST', '/friend/set_bubble', formData, { headers: {} });
+    },
+
+    /**
      * ==================== 聊天相关 ====================
      */
 

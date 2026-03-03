@@ -3,6 +3,39 @@
  */
 
 const DEFAULT_AVATAR_DATA_URI = 'data:image/svg+xml,%3Csvg%20xmlns%3D%22http://www.w3.org/2000/svg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22currentColor%22%3E%3Ccircle%20cx%3D%2212%22%20cy%3D%2212%22%20r%3D%2210%22/%3E%3Cpath%20d%3D%22M12%2012c2.21%200%204-1.79%204-4s-1.79-4-4-4-4%201.79-4%204%201.79%204%204%204zm0%202c-2.67%200-8%201.34-8%204v2h16v-2c0-2.66-5.33-4-8-4z%22/%3E%3C/svg%3E';
+const BUBBLE_DRAW_DEFAULT_BG = '#ffffff';
+const BUBBLE_DRAW_DEFAULT_LINE = '#1f2937';
+
+const BubbleComposer = {
+    initialized: false,
+    actionModal: null,
+    drawModal: null,
+    exportModal: null,
+    canvas: null,
+    ctx: null,
+    bgInput: null,
+    lineInput: null,
+    fileInput: null,
+    uploadExistingBtn: null,
+    drawNewBtn: null,
+    actionCancelBtn: null,
+    drawCancelBtn: null,
+    drawDoneBtn: null,
+    drawClearBtn: null,
+    exportUploadOnlyBtn: null,
+    exportUploadSaveBtn: null,
+    exportBackBtn: null,
+    paintLayer: null,
+    paintCtx: null,
+    bgColor: BUBBLE_DRAW_DEFAULT_BG,
+    lineColor: BUBBLE_DRAW_DEFAULT_LINE,
+    lineWidth: 4,
+    isDrawing: false,
+    lastX: 0,
+    lastY: 0,
+    currentFriendName: null,
+    pendingBlob: null,
+};
 
 const ChatModule = {
     rebuildAvatarMap(conversation) {
@@ -10,25 +43,21 @@ const ChatModule = {
         State.avatarMap = {};
 
         (State.friends || []).forEach(f => {
-            const special =
-                conversationAvatarMap[String(f.id)]
-                    ? conversationAvatarMap[String(f.id)].special
-                    : null;
+            const friendMap = conversationAvatarMap[String(f.id)] || {};
 
             State.avatarMap[String(f.id)] = {
                 global: f.image,
-                special: special
+                special: friendMap.special || null,
+                bubble: friendMap.bubble || null,
             };
         });
 
-        const mySpecial =
-            conversationAvatarMap[String(State.currentUser.id)]
-                ? conversationAvatarMap[String(State.currentUser.id)].special
-                : null;
+        const myMap = conversationAvatarMap[String(State.currentUser.id)] || {};
 
         State.avatarMap[String(State.currentUser.id)] = {
             global: State.currentUser.image,
-            special: mySpecial
+            special: myMap.special || null,
+            bubble: myMap.bubble || null,
         };
     },
 
@@ -178,6 +207,7 @@ const ChatModule = {
 
         imageBtn.addEventListener('click', () => imageInput.click());
         imageInput.addEventListener('change', (event) => this.handleSendImage(event));
+        initBubbleComposerUI();
     },
 
     handleSendMessage() {
@@ -247,6 +277,29 @@ function getAvatarForSender(sender) {
     return DEFAULT_AVATAR_DATA_URI;
 }
 
+function getBubbleForSender(sender) {
+    const avatarMap = State.avatarMap || {};
+    const currentUser = State.currentUser || {};
+    const myId = String(currentUser.id || '');
+
+    if ((currentUser.name && sender === currentUser.name) || (myId && String(sender) === myId)) {
+        const meInfo = avatarMap[myId] || {};
+        return meInfo.bubble || null;
+    }
+
+    const direct = avatarMap[String(sender)];
+    if (direct && direct.bubble) {
+        return direct.bubble;
+    }
+
+    const friendObj = (State.friends || []).find(f => f.name === sender || String(f.id) === String(sender));
+    if (friendObj && avatarMap[String(friendObj.id)] && avatarMap[String(friendObj.id)].bubble) {
+        return avatarMap[String(friendObj.id)].bubble;
+    }
+
+    return null;
+}
+
 function renderMessages() {
     const container = document.getElementById('messages-container');
     if (!State.messages.length) {
@@ -260,19 +313,24 @@ function renderMessages() {
 
         // avatar：从 avatar_map、friends 或默认中获取
         const avatarUrl = getAvatarForSender(msg.sender);
+        const bubbleUrl = isImage ? null : getBubbleForSender(msg.sender);
 
         const senderDisplay = escapeHtml(msg.sender || '');
 
         const contentHtml = isImage
             ? `<img src="${msg.content}" alt="图片消息" class="message-image">`
             : escapeHtml(msg.content || '');
+        const bubbleClass = bubbleUrl ? 'message-content message-content-custom-bubble' : 'message-content';
+        const bubbleStyle = bubbleUrl
+            ? ` style="--bubble-image: url('${escapeUrlForCss(bubbleUrl)}');"`
+            : '';
 
         return `
             <div class="message-item ${mine ? 'mine' : 'other'}">
                 <img class="message-avatar" src="${avatarUrl}" alt="avatar" />
                 <div class="message-body">
                     <div class="message-meta">${senderDisplay}</div>
-                    <div class="message-content">${contentHtml}</div>
+                    <div class="${bubbleClass}"${bubbleStyle}>${contentHtml}</div>
                 </div>
             </div>
         `;
@@ -297,6 +355,24 @@ function escapeHtml(text) {
     return String(text).replace(/[&<>"']/g, function(m) { return map[m]; });
 }
 
+function escapeUrlForCss(url) {
+    return String(url || '')
+        .replace(/\\/g, '\\\\')
+        .replace(/'/g, "\\'")
+        .replace(/"/g, '\\"');
+}
+
+function resolveSelectedFriendName() {
+    let friend = State.selectedFriend || State.selectedFriendName || null;
+    if (!friend && Array.isArray(State.friends)) {
+        const matched = State.friends.find(
+            (fr) => String(fr.id) === String(State.selectedFriend) || fr.name === State.selectedFriend
+        );
+        if (matched) friend = matched.name;
+    }
+    return friend;
+}
+
 const currentFriend = "{{ friend_username }}";
 
 // 必须挂到 window
@@ -319,15 +395,7 @@ window.uploadSpecialAvatar = async function () {
         return;
     }
 
-    // Try several fallbacks for the friend identifier:
-    // - State.selectedFriend (preferred if it is the username)
-    // - State.selectedFriendName (some codebases use this)
-    // - If we have a selected friend object in State.friends, use its name
-    let friend = State.selectedFriend || State.selectedFriendName || null;
-    if (!friend && Array.isArray(State.friends)) {
-        const f = State.friends.find(fr => String(fr.id) === String(State.selectedFriend) || fr.name === State.selectedFriend);
-        if (f) friend = f.name;
-    }
+    let friend = resolveSelectedFriendName();
 
     // Last resort: if none found, ask the user (avoids sending undefined)
     if (!friend) {
@@ -370,6 +438,443 @@ window.uploadSpecialAvatar = async function () {
     } else {
         console.warn("uploadSpecialAvatar failed:", data);
         alert("设置失败: " + (data.error || data.detail || JSON.stringify(data)));
+    }
+};
+
+function hideAllBubbleModals() {
+    if (BubbleComposer.actionModal) BubbleComposer.actionModal.classList.add('hidden');
+    if (BubbleComposer.drawModal) BubbleComposer.drawModal.classList.add('hidden');
+    if (BubbleComposer.exportModal) BubbleComposer.exportModal.classList.add('hidden');
+}
+
+function openBubbleActionModal() {
+    hideAllBubbleModals();
+    if (BubbleComposer.actionModal) {
+        BubbleComposer.actionModal.classList.remove('hidden');
+    }
+}
+
+function openBubbleDrawModal(options) {
+    const shouldReset = !options || options.reset !== false;
+    hideAllBubbleModals();
+    if (BubbleComposer.drawModal) {
+        BubbleComposer.drawModal.classList.remove('hidden');
+    }
+    if (shouldReset) {
+        resetBubbleComposerCanvas();
+    } else {
+        renderBubbleComposerCanvas();
+    }
+}
+
+function openBubbleExportModal() {
+    hideAllBubbleModals();
+    if (BubbleComposer.exportModal) {
+        BubbleComposer.exportModal.classList.remove('hidden');
+    }
+}
+
+function ensureBubblePainterLayer() {
+    if (BubbleComposer.paintLayer) return;
+    const canvas = BubbleComposer.canvas;
+    if (!canvas) return;
+    BubbleComposer.paintLayer = document.createElement('canvas');
+    BubbleComposer.paintLayer.width = canvas.width;
+    BubbleComposer.paintLayer.height = canvas.height;
+    BubbleComposer.paintCtx = BubbleComposer.paintLayer.getContext('2d');
+    if (BubbleComposer.paintCtx) {
+        BubbleComposer.paintCtx.lineCap = 'round';
+        BubbleComposer.paintCtx.lineJoin = 'round';
+    }
+}
+
+function drawBubbleNineSliceGuide(ctx, width, height) {
+    const x1 = width / 3;
+    const x2 = (width * 2) / 3;
+    const y1 = height / 3;
+    const y2 = (height * 2) / 3;
+
+    ctx.save();
+    ctx.setLineDash([6, 4]);
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.35)';
+    ctx.lineWidth = 1;
+
+    ctx.beginPath();
+    ctx.moveTo(x1, 0);
+    ctx.lineTo(x1, height);
+    ctx.moveTo(x2, 0);
+    ctx.lineTo(x2, height);
+    ctx.moveTo(0, y1);
+    ctx.lineTo(width, y1);
+    ctx.moveTo(0, y2);
+    ctx.lineTo(width, y2);
+    ctx.stroke();
+    ctx.restore();
+}
+
+function renderBubbleComposerCanvas() {
+    const { canvas, ctx, paintLayer, bgColor } = BubbleComposer;
+    if (!canvas || !ctx) return;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = bgColor;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    if (paintLayer) {
+        ctx.drawImage(paintLayer, 0, 0);
+    }
+
+    drawBubbleNineSliceGuide(ctx, canvas.width, canvas.height);
+}
+
+function resetBubbleComposerCanvas() {
+    ensureBubblePainterLayer();
+    BubbleComposer.bgColor = BUBBLE_DRAW_DEFAULT_BG;
+    BubbleComposer.lineColor = BUBBLE_DRAW_DEFAULT_LINE;
+    if (BubbleComposer.bgInput) BubbleComposer.bgInput.value = BubbleComposer.bgColor;
+    if (BubbleComposer.lineInput) BubbleComposer.lineInput.value = BubbleComposer.lineColor;
+    if (BubbleComposer.paintCtx && BubbleComposer.paintLayer) {
+        BubbleComposer.paintCtx.clearRect(0, 0, BubbleComposer.paintLayer.width, BubbleComposer.paintLayer.height);
+    }
+    BubbleComposer.pendingBlob = null;
+    BubbleComposer.isDrawing = false;
+    renderBubbleComposerCanvas();
+}
+
+function getCanvasPoint(event) {
+    const rect = BubbleComposer.canvas.getBoundingClientRect();
+    const scaleX = BubbleComposer.canvas.width / rect.width;
+    const scaleY = BubbleComposer.canvas.height / rect.height;
+    return {
+        x: (event.clientX - rect.left) * scaleX,
+        y: (event.clientY - rect.top) * scaleY,
+    };
+}
+
+function startBubbleDrawing(event) {
+    if (!BubbleComposer.paintCtx) return;
+    BubbleComposer.isDrawing = true;
+    const p = getCanvasPoint(event);
+    BubbleComposer.lastX = p.x;
+    BubbleComposer.lastY = p.y;
+
+    BubbleComposer.paintCtx.strokeStyle = BubbleComposer.lineColor;
+    BubbleComposer.paintCtx.lineWidth = BubbleComposer.lineWidth;
+    BubbleComposer.paintCtx.beginPath();
+    BubbleComposer.paintCtx.moveTo(p.x, p.y);
+    BubbleComposer.paintCtx.lineTo(p.x + 0.01, p.y + 0.01);
+    BubbleComposer.paintCtx.stroke();
+    renderBubbleComposerCanvas();
+}
+
+function continueBubbleDrawing(event) {
+    if (!BubbleComposer.isDrawing || !BubbleComposer.paintCtx) return;
+    const p = getCanvasPoint(event);
+    BubbleComposer.paintCtx.strokeStyle = BubbleComposer.lineColor;
+    BubbleComposer.paintCtx.lineWidth = BubbleComposer.lineWidth;
+    BubbleComposer.paintCtx.beginPath();
+    BubbleComposer.paintCtx.moveTo(BubbleComposer.lastX, BubbleComposer.lastY);
+    BubbleComposer.paintCtx.lineTo(p.x, p.y);
+    BubbleComposer.paintCtx.stroke();
+    BubbleComposer.lastX = p.x;
+    BubbleComposer.lastY = p.y;
+    renderBubbleComposerCanvas();
+}
+
+function stopBubbleDrawing() {
+    BubbleComposer.isDrawing = false;
+}
+
+function exportBubbleCanvasBlob() {
+    return new Promise((resolve, reject) => {
+        ensureBubblePainterLayer();
+        if (!BubbleComposer.paintLayer) {
+            reject(new Error('画布初始化失败'));
+            return;
+        }
+
+        const exportCanvas = document.createElement('canvas');
+        exportCanvas.width = BubbleComposer.paintLayer.width;
+        exportCanvas.height = BubbleComposer.paintLayer.height;
+        const exportCtx = exportCanvas.getContext('2d');
+        if (!exportCtx) {
+            reject(new Error('导出上下文创建失败'));
+            return;
+        }
+
+        exportCtx.fillStyle = BubbleComposer.bgColor;
+        exportCtx.fillRect(0, 0, exportCanvas.width, exportCanvas.height);
+        exportCtx.drawImage(BubbleComposer.paintLayer, 0, 0);
+
+        exportCanvas.toBlob((blob) => {
+            if (!blob) {
+                reject(new Error('导出图片失败'));
+                return;
+            }
+            resolve(blob);
+        }, 'image/png');
+    });
+}
+
+function downloadBubbleBlob(blob, friendName) {
+    const safeFriend = (friendName || 'friend').replace(/[^\w\u4e00-\u9fa5-]/g, '_');
+    const filename = `bubble-${safeFriend}-${Date.now()}.png`;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+async function uploadBubbleImageForFriend(imageFile, friendName) {
+    let data = null;
+    if (typeof API !== 'undefined' && typeof API.setFriendBubble === 'function') {
+        data = await API.setFriendBubble(friendName, imageFile);
+    } else {
+        const formData = new FormData();
+        formData.append('friend', friendName);
+        formData.append('image', imageFile);
+        const response = await fetch('/friend/set_bubble', {
+            method: 'POST',
+            body: formData,
+            credentials: 'include',
+        });
+        data = await response.json();
+        if (!response.ok) {
+            throw new Error(data.error || `HTTP ${response.status}`);
+        }
+    }
+
+    const bubbleUrl = data && (data.image_url || data.imageUrl || data.url);
+    if (!bubbleUrl) {
+        throw new Error('服务器未返回气泡图片地址');
+    }
+
+    const myId = String(State.currentUser && State.currentUser.id);
+    if (!State.avatarMap) State.avatarMap = {};
+    if (!State.avatarMap[myId]) State.avatarMap[myId] = {};
+    State.avatarMap[myId].bubble = bubbleUrl;
+
+    renderMessages();
+    if (window.ChatModule && typeof window.ChatModule.refreshCurrentConversationAvatarMap === 'function') {
+        await window.ChatModule.refreshCurrentConversationAvatarMap();
+    }
+
+    return bubbleUrl;
+}
+
+async function finishBubbleDrawing(options) {
+    const { saveLocal } = options || {};
+    const friend = BubbleComposer.currentFriendName || resolveSelectedFriendName();
+    if (!friend) {
+        throw new Error('找不到当前好友');
+    }
+    if (!BubbleComposer.pendingBlob) {
+        throw new Error('没有可上传的绘制结果');
+    }
+
+    if (saveLocal) {
+        downloadBubbleBlob(BubbleComposer.pendingBlob, friend);
+    }
+
+    const fileName = `bubble-${Date.now()}.png`;
+    const file = new File([BubbleComposer.pendingBlob], fileName, { type: 'image/png' });
+    await uploadBubbleImageForFriend(file, friend);
+
+    BubbleComposer.pendingBlob = null;
+    hideAllBubbleModals();
+    if (typeof showErrorToast === 'function') {
+        showErrorToast('专属气泡设置成功');
+    }
+}
+
+function initBubbleComposerUI() {
+    if (BubbleComposer.initialized) return;
+
+    BubbleComposer.actionModal = document.getElementById('bubble-action-modal');
+    BubbleComposer.drawModal = document.getElementById('bubble-draw-modal');
+    BubbleComposer.exportModal = document.getElementById('bubble-export-modal');
+    BubbleComposer.canvas = document.getElementById('bubble-draw-canvas');
+    BubbleComposer.bgInput = document.getElementById('bubble-bg-color');
+    BubbleComposer.lineInput = document.getElementById('bubble-line-color');
+    BubbleComposer.fileInput = document.getElementById('specialBubbleInput');
+    BubbleComposer.uploadExistingBtn = document.getElementById('bubble-upload-existing-btn');
+    BubbleComposer.drawNewBtn = document.getElementById('bubble-draw-new-btn');
+    BubbleComposer.actionCancelBtn = document.getElementById('bubble-action-cancel-btn');
+    BubbleComposer.drawCancelBtn = document.getElementById('bubble-draw-cancel-btn');
+    BubbleComposer.drawDoneBtn = document.getElementById('bubble-draw-done-btn');
+    BubbleComposer.drawClearBtn = document.getElementById('bubble-clear-btn');
+    BubbleComposer.exportUploadOnlyBtn = document.getElementById('bubble-upload-only-btn');
+    BubbleComposer.exportUploadSaveBtn = document.getElementById('bubble-upload-save-local-btn');
+    BubbleComposer.exportBackBtn = document.getElementById('bubble-export-back-btn');
+
+    if (!BubbleComposer.canvas) {
+        return;
+    }
+
+    BubbleComposer.ctx = BubbleComposer.canvas.getContext('2d');
+    ensureBubblePainterLayer();
+    resetBubbleComposerCanvas();
+
+    if (BubbleComposer.uploadExistingBtn) {
+        BubbleComposer.uploadExistingBtn.addEventListener('click', () => {
+            hideAllBubbleModals();
+            if (BubbleComposer.fileInput) {
+                BubbleComposer.fileInput.click();
+            }
+        });
+    }
+
+    if (BubbleComposer.drawNewBtn) {
+        BubbleComposer.drawNewBtn.addEventListener('click', () => {
+            openBubbleDrawModal({ reset: true });
+        });
+    }
+
+    if (BubbleComposer.actionCancelBtn) {
+        BubbleComposer.actionCancelBtn.addEventListener('click', () => {
+            hideAllBubbleModals();
+        });
+    }
+
+    if (BubbleComposer.drawCancelBtn) {
+        BubbleComposer.drawCancelBtn.addEventListener('click', () => {
+            openBubbleActionModal();
+        });
+    }
+
+    if (BubbleComposer.drawClearBtn) {
+        BubbleComposer.drawClearBtn.addEventListener('click', () => {
+            if (BubbleComposer.paintCtx && BubbleComposer.paintLayer) {
+                BubbleComposer.paintCtx.clearRect(0, 0, BubbleComposer.paintLayer.width, BubbleComposer.paintLayer.height);
+            }
+            renderBubbleComposerCanvas();
+        });
+    }
+
+    if (BubbleComposer.bgInput) {
+        BubbleComposer.bgInput.addEventListener('input', (event) => {
+            BubbleComposer.bgColor = event.target.value || BUBBLE_DRAW_DEFAULT_BG;
+            renderBubbleComposerCanvas();
+        });
+    }
+
+    if (BubbleComposer.lineInput) {
+        BubbleComposer.lineInput.addEventListener('input', (event) => {
+            BubbleComposer.lineColor = event.target.value || BUBBLE_DRAW_DEFAULT_LINE;
+        });
+    }
+
+    if (BubbleComposer.drawDoneBtn) {
+        BubbleComposer.drawDoneBtn.addEventListener('click', async () => {
+            try {
+                BubbleComposer.pendingBlob = await exportBubbleCanvasBlob();
+                openBubbleExportModal();
+            } catch (error) {
+                if (typeof showErrorToast === 'function') {
+                    showErrorToast('导出失败: ' + (error.message || error));
+                }
+            }
+        });
+    }
+
+    if (BubbleComposer.exportBackBtn) {
+        BubbleComposer.exportBackBtn.addEventListener('click', () => {
+            openBubbleDrawModal({ reset: false });
+        });
+    }
+
+    if (BubbleComposer.exportUploadOnlyBtn) {
+        BubbleComposer.exportUploadOnlyBtn.addEventListener('click', async () => {
+            try {
+                await finishBubbleDrawing({ saveLocal: false });
+            } catch (error) {
+                if (typeof showErrorToast === 'function') {
+                    showErrorToast('上传失败: ' + (error.message || error));
+                }
+            }
+        });
+    }
+
+    if (BubbleComposer.exportUploadSaveBtn) {
+        BubbleComposer.exportUploadSaveBtn.addEventListener('click', async () => {
+            try {
+                await finishBubbleDrawing({ saveLocal: true });
+            } catch (error) {
+                if (typeof showErrorToast === 'function') {
+                    showErrorToast('上传失败: ' + (error.message || error));
+                }
+            }
+        });
+    }
+
+    BubbleComposer.canvas.addEventListener('pointerdown', (event) => {
+        if (event.button !== 0) return;
+        event.preventDefault();
+        BubbleComposer.canvas.setPointerCapture(event.pointerId);
+        startBubbleDrawing(event);
+    });
+    BubbleComposer.canvas.addEventListener('pointermove', (event) => {
+        if (!BubbleComposer.isDrawing) return;
+        event.preventDefault();
+        continueBubbleDrawing(event);
+    });
+    BubbleComposer.canvas.addEventListener('pointerup', (event) => {
+        event.preventDefault();
+        stopBubbleDrawing();
+        if (BubbleComposer.canvas.hasPointerCapture(event.pointerId)) {
+            BubbleComposer.canvas.releasePointerCapture(event.pointerId);
+        }
+    });
+    BubbleComposer.canvas.addEventListener('pointercancel', stopBubbleDrawing);
+    BubbleComposer.canvas.addEventListener('pointerleave', stopBubbleDrawing);
+
+    BubbleComposer.initialized = true;
+}
+
+window.chooseSpecialBubble = function () {
+    initBubbleComposerUI();
+    const friend = resolveSelectedFriendName();
+    if (!friend) {
+        alert("找不到当前好友，请先打开与好友的聊天窗口再设置专属气泡。");
+        return;
+    }
+    BubbleComposer.currentFriendName = friend;
+    openBubbleActionModal();
+};
+
+window.uploadSpecialBubble = async function () {
+    initBubbleComposerUI();
+    const input = document.getElementById("specialBubbleInput");
+    const file = input && input.files ? input.files[0] : null;
+    if (!file) {
+        return;
+    }
+
+    const friend = BubbleComposer.currentFriendName || resolveSelectedFriendName();
+    if (!friend) {
+        alert("找不到当前好友，请先打开与好友的聊天窗口再设置专属气泡。");
+        if (input) input.value = '';
+        return;
+    }
+
+    try {
+        await uploadBubbleImageForFriend(file, friend);
+        hideAllBubbleModals();
+        if (typeof showErrorToast === 'function') {
+            showErrorToast('专属气泡设置成功');
+        }
+    } catch (error) {
+        if (typeof showErrorToast === 'function') {
+            showErrorToast('设置专属气泡失败: ' + (error.message || error));
+        } else {
+            alert('设置专属气泡失败');
+        }
+    } finally {
+        if (input) input.value = '';
     }
 };
 

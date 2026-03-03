@@ -145,6 +145,19 @@
                                 设置专属头像
                             </button>
                         </form>
+                        <form id="specialBubbleForm" onsubmit="return false;">
+                            <input
+                                type="file"
+                                id="specialBubbleInput"
+                                accept="image/*"
+                                style="display:none"
+                                onchange="uploadSpecialBubble()"
+                            >
+
+                            <button type="button" onclick="chooseSpecialBubble()">
+                                设置专属气泡
+                            </button>
+                        </form>
                         <button id="delete-friend-btn" class="btn btn-danger btn-small">删除好友</button>
                     </div>
 
@@ -188,6 +201,67 @@
 
         <!-- 全局错误提示 -->
         <div id="error-toast" class="error-toast hidden"></div>
+
+        <!-- 专属气泡：选择上传方式 -->
+        <div id="bubble-action-modal" class="bubble-modal hidden">
+            <div class="bubble-modal-panel">
+                <h3>设置专属气泡</h3>
+                <p class="bubble-modal-tip">请选择上传已有图片，或先绘制再上传。</p>
+                <div class="bubble-modal-actions">
+                    <button id="bubble-upload-existing-btn" class="btn btn-primary">上传已有图片</button>
+                    <button id="bubble-draw-new-btn" class="btn">绘制图片</button>
+                </div>
+                <div class="bubble-modal-footer">
+                    <button id="bubble-action-cancel-btn" class="btn">取消</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 专属气泡：绘制窗口 -->
+        <div id="bubble-draw-modal" class="bubble-modal hidden">
+            <div class="bubble-modal-panel bubble-draw-panel">
+                <div class="bubble-draw-header">
+                    <h3>绘制专属气泡</h3>
+                    <p class="bubble-modal-tip">虚线是九宫格参考线，仅用于提示，不会导出到图片。</p>
+                </div>
+
+                <div class="bubble-draw-toolbar">
+                    <label class="bubble-color-control">
+                        背景色
+                        <input type="color" id="bubble-bg-color" value="#ffffff">
+                    </label>
+                    <label class="bubble-color-control">
+                        线条色
+                        <input type="color" id="bubble-line-color" value="#1f2937">
+                    </label>
+                    <button id="bubble-clear-btn" class="btn btn-small">清空画布</button>
+                </div>
+
+                <div class="bubble-canvas-wrap">
+                    <canvas id="bubble-draw-canvas" width="360" height="240"></canvas>
+                </div>
+
+                <div class="bubble-modal-actions">
+                    <button id="bubble-draw-cancel-btn" class="btn">取消</button>
+                    <button id="bubble-draw-done-btn" class="btn btn-primary">完成</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 专属气泡：导出方式 -->
+        <div id="bubble-export-modal" class="bubble-modal hidden">
+            <div class="bubble-modal-panel">
+                <h3>导出并上传</h3>
+                <p class="bubble-modal-tip">选择导出方式后将自动上传为当前好友的专属气泡。</p>
+                <div class="bubble-modal-actions">
+                    <button id="bubble-upload-save-local-btn" class="btn btn-primary">上传并保存本地</button>
+                    <button id="bubble-upload-only-btn" class="btn">仅上传</button>
+                </div>
+                <div class="bubble-modal-footer">
+                    <button id="bubble-export-back-btn" class="btn">返回绘制</button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- 引入依赖 -->

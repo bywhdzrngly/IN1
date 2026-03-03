@@ -600,6 +600,30 @@ body {
     max-width: 100%;
 }
 
+.message-item.mine .message-content {
+    background-color: var(--primary-color);
+    color: white;
+    border-bottom-right-radius: 2px;
+}
+
+.message-item.other .message-content {
+    background-color: var(--bg-light);
+    color: var(--text-dark);
+    border-bottom-left-radius: 2px;
+}
+
+.message-content.message-content-custom-bubble {
+    background: transparent;
+    border: 20px solid transparent;
+    border-image-source: var(--bubble-image);
+    border-image-slice: 30 fill;
+    border-image-width: 20px;
+    border-image-repeat: stretch;
+    border-radius: 0;
+    padding: 8px 10px;
+    color: var(--text-dark);
+}
+
 .message-avatar {
     width: 32px;
     height: 32px;
@@ -772,6 +796,109 @@ body {
     display: none;
 }
 
+/* ==================== 专属气泡弹窗 ==================== */
+.bubble-modal {
+    position: fixed;
+    inset: 0;
+    background-color: rgba(0, 0, 0, 0.35);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1100;
+    padding: 16px;
+}
+
+.bubble-modal.hidden {
+    display: none;
+}
+
+.bubble-modal-panel {
+    width: 100%;
+    max-width: 520px;
+    background: var(--bg-white);
+    border-radius: 10px;
+    box-shadow: var(--shadow-md);
+    padding: 18px;
+}
+
+.bubble-modal-panel h3 {
+    font-size: 18px;
+    margin-bottom: 8px;
+}
+
+.bubble-modal-tip {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-bottom: 14px;
+}
+
+.bubble-modal-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.bubble-modal-footer {
+    margin-top: 14px;
+    display: flex;
+    justify-content: flex-end;
+}
+
+.bubble-draw-panel {
+    max-width: 680px;
+}
+
+.bubble-draw-header {
+    margin-bottom: 12px;
+}
+
+.bubble-draw-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+}
+
+.bubble-color-control {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--text-dark);
+}
+
+.bubble-color-control input[type="color"] {
+    width: 32px;
+    height: 32px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 0;
+    background: none;
+    cursor: pointer;
+}
+
+.bubble-canvas-wrap {
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 10px;
+    background: #f4f6f9;
+    margin-bottom: 12px;
+    overflow-x: auto;
+}
+
+#bubble-draw-canvas {
+    display: block;
+    width: 100%;
+    max-width: 640px;
+    height: auto;
+    margin: 0 auto;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    touch-action: none;
+    cursor: crosshair;
+}
+
 @keyframes slideUp {
     from {
         transform: translateY(100%);
@@ -806,6 +933,10 @@ body {
     }
 
     .auth-card {
+        max-width: 100%;
+    }
+
+    .bubble-modal-panel {
         max-width: 100%;
     }
 }
