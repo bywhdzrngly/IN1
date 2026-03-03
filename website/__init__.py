@@ -93,6 +93,8 @@ class Friendship(db.Model):
     timestamp = db.Column(db.DateTime, index=True)
     image_by_user1 = db.Column(db.String(256), nullable=True)  # user1 设置的专属头像
     image_by_user2 = db.Column(db.String(256), nullable=True)  # user2 设置的专属头像
+    bubble1 = db.Column(db.String(256), nullable=True) # user1 气泡
+    bubble2 = db.Column(db.String(256), nullable=True)  #user2 气泡
 
     # 关联 User 对象，便于获取用户名等信息
     user1 = db.relationship('User', foreign_keys=[user1_id])
@@ -112,6 +114,8 @@ class Friendship(db.Model):
             "timestamp": self.timestamp.isoformat() if self.timestamp else None,
             "image_by_user1": self.image_by_user1,
             "image_by_user2": self.image_by_user2,
+            "bubble1": self.bubble1,
+            "bubble2": self.bubble2,
         }
 
 

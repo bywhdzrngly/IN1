@@ -64,24 +64,6 @@ def upload_image_local(file, upload_folder):
     # 返回本地访问路径
     return f"/uploads/{filename}"
 
-def get_display_avatar(sender_id, friendship):
-    """
-    根据发送者ID和友谊对象返回要显示的头像URL。
-    优先返回专属头像，否则返回发送者的全局头像。
-    """
-    if sender_id == friendship.user1_id:
-        avatar = friendship.image_by_user1
-    elif sender_id == friendship.user2_id:
-        avatar = friendship.image_by_user2
-    else:
-        return None  # 发送者不在友谊中
-
-    if avatar:
-        return avatar
-
-    # 回退到全局头像
-    sender = User.query.get(sender_id)
-    return sender.image if sender else None
 
 @views.route("/")
 @login_required
@@ -178,19 +160,24 @@ def get_or_create_conversation(username):
         db.session.add(conv)
         db.session.commit()
 
-    avatar_map = {
+    avatar_and_bubble_map = {
         str(me.id): {
             "global": me.image,
-            "special": friendship.image_by_user1 if me.id == friendship.user1_id else friendship.image_by_user2
+            "special": friendship.image_by_user1 if me.id == friendship.user1_id else friendship.image_by_user2,
+            "bubble": friendship.bubble1 if me.id == friendship.user1_id else friendship.bubble2
         },
         str(target.id): {
             "global": target.image,
-            "special": friendship.image_by_user2 if me.id == friendship.user1_id else friendship.image_by_user1
+            "special": friendship.image_by_user2 if me.id == friendship.user1_id else friendship.image_by_user1,
+            "bubble": friendship.bubble2 if me.id == friendship.user1_id else friendship.bubble1
         }
     }
 
+
+
     conversation_data = conv.getJsonData()
-    conversation_data['avatar_map'] = avatar_map
+    conversation_data['map'] = avatar_and_bubble_map
+
 
     return jsonify(conversation_data)
 
@@ -501,6 +488,40 @@ def set_friend_avatar():
     except Exception as e:
         current_app.logger.exception("set_friend_avatar exception")
         return jsonify({"error": "internal_server_error", "detail": str(e)}), 500
+
+@views.route('/friend/set_bubble', methods=['POST'])
+@login_required
+def set_friend_bubble():
+    friend_name = request.form.get('friend')
+    image = request.files.get('image')
+
+    if not friend_name or not image:
+        return jsonify({"error": "Missing friend or image"}), 400
+
+    target = User.query.filter_by(name=friend_name).first()
+    if not target:
+        return jsonify({"error": "User not found"}), 404
+
+    # 使用 ID 查询友谊记录
+    user1_id = min(current_user.id, target.id)
+    user2_id = max(current_user.id, target.id)
+    friendship = Friendship.query.filter_by(user1_id=user1_id, user2_id=user2_id).first()
+    if not friendship:
+        return jsonify({"error": "Not friends"}), 403
+
+    from flask import current_app
+    image_url = upload_image_local(image, current_app.config['UPLOAD_FOLDER'])
+    if not image_url:
+        return jsonify({"error": "Upload failed"}), 500
+
+    # 根据当前用户 ID 存入对应字段
+    if current_user.id == friendship.user1_id:
+        friendship.bubble1 = image_url
+    else:
+        friendship.bubble2 = image_url
+
+    db.session.commit()
+    return jsonify({"status": "ok", "image_url": image_url})
 
 @views.route('/users', methods=['GET'])
 @login_required
