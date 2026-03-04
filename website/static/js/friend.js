@@ -5,6 +5,16 @@
 
 const FriendsModule = {
     /**
+     * 判断是否是当前登录用户自己
+     */
+    isSelfFriendName(friendName) {
+        if (!friendName || !State.currentUser || !State.currentUser.name) {
+            return false;
+        }
+        return String(friendName) === String(State.currentUser.name);
+    },
+
+    /**
      * 初始化好友模块
      */
     init() {
@@ -256,6 +266,11 @@ const FriendsModule = {
      */
     async handleDeleteFriend() {
         if (!State.selectedFriendName) return;
+
+        if (this.isSelfFriendName(State.selectedFriendName)) {
+            showErrorToast('不能删除自己');
+            return;
+        }
 
         if (!confirm(`确定要删除好友 ${State.selectedFriendName} 吗？`)) {
             return;

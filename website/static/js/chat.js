@@ -492,6 +492,9 @@ window.uploadSpecialAvatar = async function () {
         if (!State.avatarMap[myId]) State.avatarMap[myId] = {};
         State.avatarMap[myId].special = data.image_url || data.imageurl || data.imageUrl;
         renderMessages();
+        if (window.ChatModule && typeof window.ChatModule.refreshCurrentConversationAvatarMap === 'function') {
+            await window.ChatModule.refreshCurrentConversationAvatarMap();
+        }
         alert("专属头像设置成功");
     } else {
         console.warn("uploadSpecialAvatar failed:", data);

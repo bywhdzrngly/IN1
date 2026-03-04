@@ -5,10 +5,41 @@
 
 const SocketManager = {
     /**
+     * 确保 socket 实例存在并尝试连接
+     */
+    ensureSocketReady() {
+        if (!State.socket) {
+            this.init();
+        } else if (!State.socket.connected) {
+            try {
+                State.socket.connect();
+            } catch (error) {
+                console.warn('Socket reconnect failed:', error);
+            }
+        }
+        return State.socket;
+    },
+
+    /**
      * 初始化 Socket 连接
      */
     init() {
         if (State.socket) {
+            if (!State.socket.connected) {
+                try {
+                    State.socket.connect();
+                } catch (error) {
+                    console.warn('Socket reconnect failed:', error);
+                }
+            }
+            return;
+        }
+
+        if (typeof io !== 'function') {
+            console.error('Socket.IO client not loaded');
+            if (typeof showErrorToast === 'function') {
+                showErrorToast('实时连接组件加载失败，请刷新页面重试');
+            }
             return;
         }
 
@@ -59,9 +90,10 @@ const SocketManager = {
      * 加入会话房间
      */
     joinConversation(conversationId) {
-        if (!State.socket) return;
+        const socket = this.ensureSocketReady();
+        if (!socket) return;
 
-        State.socket.emit('joinConversation', {
+        socket.emit('joinConversation', {
             conversation_id: conversationId,
         });
 
@@ -72,12 +104,13 @@ const SocketManager = {
      * 发送文本消息
      */
     sendMessage(conversationId, content) {
-        if (!State.socket) {
+        const socket = this.ensureSocketReady();
+        if (!socket) {
             showErrorToast('连接未建立');
             return;
         }
 
-        State.socket.emit('conversationMessage', {
+        socket.emit('conversationMessage', {
             conversation_id: conversationId,
             content: content,
         });
@@ -89,12 +122,13 @@ const SocketManager = {
      * 发送图片
      */
     sendImage(conversationId, imageUrl) {
-        if (!State.socket) {
+        const socket = this.ensureSocketReady();
+        if (!socket) {
             showErrorToast('连接未建立');
             return;
         }
 
-        State.socket.emit('conversationImage', {
+        socket.emit('conversationImage', {
             conversation_id: conversationId,
             image_url: imageUrl,
         });
@@ -106,9 +140,10 @@ const SocketManager = {
      * 获取历史消息
      */
     getHistoryMessages(conversationId) {
-        if (!State.socket) return;
+        const socket = this.ensureSocketReady();
+        if (!socket) return;
 
-        State.socket.emit('getConversationMessages', {
+        socket.emit('getConversationMessages', {
             conversation_id: conversationId,
         });
 

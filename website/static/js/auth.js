@@ -189,9 +189,15 @@ const AuthModule = {
             State.setLoading(true);
             const result = await API.updateUserName(newName);
             const updatedName = (result && result.name) ? result.name : newName;
+            const wasSelfConversationSelected = !!currentName && State.selectedFriendName === currentName;
 
             State.setCurrentUser({ name: updatedName });
             this.displayUserInfo(State.currentUser);
+
+            if (wasSelfConversationSelected) {
+                State.setSelectedFriend(updatedName);
+                localStorage.setItem('lastSelectedFriendName', updatedName);
+            }
 
             // 本地已加载消息里仍是旧 sender 时，立即同步，避免头像/归属判断短暂异常
             if (Array.isArray(State.messages) && currentName && currentName !== updatedName) {
@@ -209,6 +215,10 @@ const AuthModule = {
 
             // 重新拉取一次用户相关数据，保持搜索/好友等状态一致
             await this.loadUserData();
+
+            if (wasSelfConversationSelected && window.ChatModule && typeof window.ChatModule.selectFriend === 'function') {
+                await window.ChatModule.selectFriend(updatedName);
+            }
 
             // 改名后重新连接，确保加入新用户名对应的 socket room
             SocketManager.disconnect();

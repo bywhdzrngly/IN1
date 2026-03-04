@@ -3,7 +3,8 @@ from flask import Blueprint, request, redirect, url_for, session, jsonify
 from flask_login import login_user, logout_user, login_required, current_user
 from . import db
 # 等价于from website import db
-from .__init__ import User
+from .__init__ import User, Friendship
+from datetime import datetime
 import os
 import uuid
 from werkzeug.utils import secure_filename
@@ -65,6 +66,13 @@ def signup_post():
         session['username'] = name
         db.session.add(u)
         db.session.commit()
+
+        # 注册成功后自动建立“自己-自己”友谊，保证好友列表初始包含自己
+        self_friendship = Friendship.query.filter_by(user1_id=u.id, user2_id=u.id).first()
+        if not self_friendship:
+            self_friendship = Friendship(user1_id=u.id, user2_id=u.id, timestamp=datetime.utcnow())
+            db.session.add(self_friendship)
+            db.session.commit()
 
         return jsonify({
             "status": "ok",
