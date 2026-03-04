@@ -39,9 +39,7 @@ class User(UserMixin, db.Model):
 
     
 class Conversation(db.Model):
-    __table_args__ = (
-        db.UniqueConstraint('user1', 'user2', name='uq_conversation_users'),
-    )
+    #增加自己聊天功能时删去user1和user2不同的限制
     id = db.Column(db.Integer, primary_key=True)
     user1 = db.Column(db.String(80), index=True)
     user2 = db.Column(db.String(80), index=True)

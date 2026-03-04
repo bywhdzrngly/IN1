@@ -8,6 +8,8 @@ import uuid
 import re
 from werkzeug.utils import secure_filename
 from sqlalchemy.exc import IntegrityError
+from flask import session
+from flask_login import logout_user
 
 views = Blueprint("views", __name__)
 HEX_COLOR_RE = re.compile(r'^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$')
@@ -107,25 +109,6 @@ def upload_bubble_local(file, upload_folder):
     file.save(file_path)
     return f"/uploads/bubbles/{filename}"
 
-def get_display_avatar(sender_id, friendship):
-    """
-    根据发送者ID和友谊对象返回要显示的头像URL。
-    优先返回专属头像，否则返回发送者的全局头像。
-    """
-    if sender_id == friendship.user1_id:
-        avatar = friendship.image_by_user1
-    elif sender_id == friendship.user2_id:
-        avatar = friendship.image_by_user2
-    else:
-        return None  # 发送者不在友谊中
-
-    if avatar:
-        return avatar
-
-    # 回退到全局头像
-    sender = User.query.get(sender_id)
-    return sender.image if sender else None
-
 
 @views.route("/")
 @login_required
@@ -158,6 +141,66 @@ def get_current_user():
         "image": current_user.image,
     })
 
+@views.route('/user', methods=['DELETE'])
+@login_required
+def delete_user():
+    user = User.query.get(current_user.id)
+    if not user:
+        return jsonify({"error": "user not found"}), 404
+
+    old_name = user.name
+    usernames_to_notify = set()# 建一个集合用来放friendship或者其他关系里面的对面用户
+
+    try:
+        # 1. 删除friendship
+        friendships = Friendship.query.filter(
+            (Friendship.user1_id == user.id) | (Friendship.user2_id == user.id)
+        ).all()
+        for f in friendships:
+            if f.user1_id == user.id and f.user2:
+                usernames_to_notify.add(f.user2.name) #将对面用户放入集合
+            elif f.user2_id == user.id and f.user1:
+                usernames_to_notify.add(f.user1.name)
+            db.session.delete(f)
+
+        # 2. 删除好友请求
+        friend_requests = FriendRequest.query.filter(
+            (FriendRequest.from_user == user.name) | (FriendRequest.to_user == user.name)
+        ).all()
+        for req in friend_requests:
+            if req.from_user == user.name:
+                usernames_to_notify.add(req.to_user)
+            else:
+                usernames_to_notify.add(req.from_user)
+            db.session.delete(req)
+
+        # 3. 删除对话及消息
+        convs = Conversation.query.filter(
+            (Conversation.user1 == user.name) | (Conversation.user2 == user.name)
+        ).all()
+        conv_ids = [c.id for c in convs]
+        if conv_ids:
+            Message.query.filter(Message.conversation_id.in_(conv_ids)).delete(synchronize_session=False)
+        for c in convs:
+            db.session.delete(c)
+
+        # 4. 最后删除用户自身
+        User.query.filter(User.id == user.id).delete()
+
+        db.session.commit()
+
+        # 通知集合中的用户
+        _emit_friend_data_changed(old_name, *usernames_to_notify)
+
+        logout_user()
+        session.clear()
+
+        return jsonify({"status": "ok", "message": "User deleted successfully"}), 200
+
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error deleting user: {e}", exc_info=True)
+        return jsonify({"error": "database error"}), 500
 
 @views.route('/user/name', methods=['POST'])
 def update_user_name():
@@ -268,7 +311,12 @@ def update_avatar():
 def get_or_create_conversation(username):
     me = current_user
     if username == me.name:
-        return jsonify({"error": "cannot chat with yourself"}), 400
+        conv = Conversation.query.filter_by(user1=me.name,user2=me.name).first()
+        if not conv:
+            conv = Conversation(user1=me.name,user2=me.name)
+            db.session.add(conv)
+            db.session.commit()
+        return jsonify(conv.getJsonData())
 
     target = User.query.filter_by(name=username).first()
     if not target:
@@ -297,7 +345,6 @@ def get_or_create_conversation(username):
     avatar_map = {
         str(me.id): {
             "global": me.image,
-
             "special": friendship.image_by_user1 if me.id == friendship.user1_id else friendship.image_by_user2,
             "bubble": friendship.bubble1 if me.id == friendship.user1_id else friendship.bubble2,
             "text_color": friendship.bubble_text_color1 if me.id == friendship.user1_id else friendship.bubble_text_color2,
@@ -313,7 +360,6 @@ def get_or_create_conversation(username):
     conversation_data = conv.getJsonData()
 
     # 兼容前端历史字段名：avatar_map（当前使用）与 map（旧字段）
-    conversation_data['avatar_map'] = avatar_map
     conversation_data['map'] = avatar_map
 
     return jsonify(conversation_data)
@@ -337,18 +383,20 @@ def send_message():
     if current_user.name not in (conv.user1, conv.user2):
         return jsonify({"error": "forbidden"}), 403
 
-    # 获取对话双方的 User 对象
-    user1 = User.query.filter_by(name=conv.user1).first()
-    user2 = User.query.filter_by(name=conv.user2).first()
-    if not user1 or not user2:
-        return jsonify({"error": "conversation participants invalid"}), 500
+    if conv.user1 == conv.user2:
+        pass
+    else:
+        user1 = User.query.filter_by(name=conv.user1).first()
+        user2 = User.query.filter_by(name=conv.user2).first()
+        if not user1 or not user2:
+            return jsonify({"error": "conversation participants invalid"}), 500
 
-    # 检查是否仍是好友（用 ID）
-    user1_id = min(user1.id, user2.id)
-    user2_id = max(user1.id, user2.id)
-    is_friend = Friendship.query.filter_by(user1_id=user1_id, user2_id=user2_id).first()
-    if not is_friend:
-        return jsonify({"error": "not friends"}), 403
+        # 检查是否仍是好友（用 ID）
+        user1_id = min(user1.id, user2.id)
+        user2_id = max(user1.id, user2.id)
+        is_friend = Friendship.query.filter_by(user1_id=user1_id, user2_id=user2_id).first()
+        if not is_friend:
+            return jsonify({"error": "not friends"}), 403
 
     msg = Message(
         conversation_id=conversation_id,
