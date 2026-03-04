@@ -1092,7 +1092,14 @@ function initBubbleComposerUI() {
     }
 
     if (BubbleComposer.lineInput) {
+        BubbleComposer.lineInput.addEventListener('click', () => {
+            setBubbleToolMode('draw');
+        });
         BubbleComposer.lineInput.addEventListener('input', (event) => {
+            BubbleComposer.lineColor = event.target.value || BUBBLE_DRAW_DEFAULT_LINE;
+            setBubbleToolMode('draw');
+        });
+        BubbleComposer.lineInput.addEventListener('change', (event) => {
             BubbleComposer.lineColor = event.target.value || BUBBLE_DRAW_DEFAULT_LINE;
             setBubbleToolMode('draw');
         });

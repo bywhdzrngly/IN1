@@ -25,6 +25,23 @@ const AuthModule = {
     },
 
     /**
+     * 清空搜索框及搜索结果 UI（用于账号切换）
+     */
+    resetSearchUI() {
+        State.searchQuery = '';
+        State.setSearchResults([]);
+
+        const searchInput = document.getElementById('search-input');
+        if (searchInput) {
+            searchInput.value = '';
+        }
+
+        if (window.FriendsModule && typeof window.FriendsModule.renderSearchResults === 'function') {
+            window.FriendsModule.renderSearchResults();
+        }
+    },
+
+    /**
      * 处理登录
      */
     async handleLogin(event) {
@@ -42,6 +59,7 @@ const AuthModule = {
         try {
             State.setLoading(true);
             State.resetForAccountSwitch();
+            this.resetSearchUI();
             if (window.ChatModule && typeof window.ChatModule.resetChatPanel === 'function') {
                 window.ChatModule.resetChatPanel();
             }
@@ -128,6 +146,7 @@ const AuthModule = {
 
             // 清空状态
             State.resetForAccountSwitch();
+            this.resetSearchUI();
             localStorage.removeItem('lastSelectedFriendName');
             if (window.ChatModule && typeof window.ChatModule.resetChatPanel === 'function') {
                 window.ChatModule.resetChatPanel();
