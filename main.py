@@ -90,17 +90,18 @@ def conversation_message(data):
     if current_user.name not in (conv.user1, conv.user2):
         return
 
-    other_username = conv.user1 if conv.user1 != current_user.name else conv.user2
-    other_user = User.query.filter_by(name=other_username).first()
-    if not other_user:
-        return
+    if conv.user1 != conv.user2:
+        other_username = conv.user1 if conv.user1 != current_user.name else conv.user2
+        other_user = User.query.filter_by(name=other_username).first()
+        if not other_user:
+            return
 
-    # 用 ID 检查友谊，确保 user1_id < user2_id
-    user1_id = min(current_user.id, other_user.id)
-    user2_id = max(current_user.id, other_user.id)
-    friendship = Friendship.query.filter_by(user1_id=user1_id, user2_id=user2_id).first()
-    if not friendship:
-        return
+        # 用 ID 检查友谊，确保 user1_id < user2_id
+        user1_id = min(current_user.id, other_user.id)
+        user2_id = max(current_user.id, other_user.id)
+        friendship = Friendship.query.filter_by(user1_id=user1_id, user2_id=user2_id).first()
+        if not friendship:
+            return
 
     msg = Message(
         conversation_id=conversation_id,
@@ -163,17 +164,18 @@ def conversation_image(data):
     if current_user.name not in (conv.user1, conv.user2):
         return
 
-    other_username = conv.user1 if conv.user1 != current_user.name else conv.user2
-    other_user = User.query.filter_by(name=other_username).first()
-    if not other_user:
-        return
+    if conv.user1 != conv.user2:
+        other_username = conv.user1 if conv.user1 != current_user.name else conv.user2
+        other_user = User.query.filter_by(name=other_username).first()
+        if not other_user:
+            return
 
-    # id检查
-    user1_id = min(current_user.id, other_user.id)
-    user2_id = max(current_user.id, other_user.id)
-    friendship = Friendship.query.filter_by(user1_id=user1_id, user2_id=user2_id).first()
-    if not friendship:
-        return
+        # id检查
+        user1_id = min(current_user.id, other_user.id)
+        user2_id = max(current_user.id, other_user.id)
+        friendship = Friendship.query.filter_by(user1_id=user1_id, user2_id=user2_id).first()
+        if not friendship:
+            return
 
     msg = Message(
         conversation_id=conversation_id,
