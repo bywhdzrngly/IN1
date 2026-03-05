@@ -6,6 +6,10 @@ const DEFAULT_AVATAR_DATA_URI = 'data:image/svg+xml,%3Csvg%20xmlns%3D%22http://w
 const BUBBLE_DRAW_DEFAULT_BG = '#ffffff';
 const BUBBLE_DRAW_DEFAULT_LINE = '#1f2937';
 const BUBBLE_DRAW_DEFAULT_FILL = '#22c55e';
+const SELF_CHAT_SEND_SIDE_STORAGE_KEY = 'selfChatSendSide';
+const SELF_CHAT_ROLE_STATE_STORAGE_KEY_PREFIX = 'selfChatRoleState';
+const SELF_CHAT_LEFT_ROLE_DEFAULT_TEXT_COLOR = '#111827';
+const SELF_CHAT_MESSAGE_SIDE_MAP_MAX_SIZE = 3000;
 
 const BubbleComposer = {
     initialized: false,
@@ -48,7 +52,457 @@ const BubbleComposer = {
     pendingBlob: null,
     undoStack: [],
     pendingTextColorResolve: null,
+    mode: 'friend',
+    onLocalBubbleSelected: null,
+    onLocalBubbleCancelled: null,
+    previewBubbleOverride: null,
 };
+
+const RoleSwitchEditor = {
+    initialized: false,
+    modal: null,
+    cancelConfirmModal: null,
+    successModal: null,
+    previewAvatar: null,
+    previewName: null,
+    previewContent: null,
+    changeAvatarBtn: null,
+    changeNameBtn: null,
+    changeBubbleBtn: null,
+    changeTextColorBtn: null,
+    cancelBtn: null,
+    completeBtn: null,
+    avatarInput: null,
+    cancelYesBtn: null,
+    cancelNoBtn: null,
+    successConfirmBtn: null,
+    draft: null,
+};
+
+function normalizeSelfSendSide(side) {
+    return side === 'left' ? 'left' : 'right';
+}
+
+function getSelfChatRoleStorageKey() {
+    const currentUser = State.currentUser || {};
+    if (currentUser.id !== null && currentUser.id !== undefined) {
+        return `${SELF_CHAT_ROLE_STATE_STORAGE_KEY_PREFIX}:uid:${String(currentUser.id)}`;
+    }
+    if (currentUser.name) {
+        return `${SELF_CHAT_ROLE_STATE_STORAGE_KEY_PREFIX}:name:${String(currentUser.name)}`;
+    }
+    return `${SELF_CHAT_ROLE_STATE_STORAGE_KEY_PREFIX}:anonymous`;
+}
+
+function trimSelfChatMessageSideById() {
+    const map = State.selfChatMessageSideById || {};
+    const keys = Object.keys(map);
+    if (keys.length <= SELF_CHAT_MESSAGE_SIDE_MAP_MAX_SIZE) {
+        return;
+    }
+    const removeCount = keys.length - SELF_CHAT_MESSAGE_SIDE_MAP_MAX_SIZE;
+    for (let i = 0; i < removeCount; i += 1) {
+        delete map[keys[i]];
+    }
+    State.selfChatMessageSideById = map;
+}
+
+function persistSelfChatRoleState() {
+    ensureSelfChatRoleState();
+    trimSelfChatMessageSideById();
+
+    const storageKey = getSelfChatRoleStorageKey();
+    State.selfChatRoleStorageKey = storageKey;
+
+    const payload = {
+        side: normalizeSelfSendSide(State.selfChatSendSide),
+        leftRoleAppearance: normalizeSelfLeftRoleAppearance(State.selfChatLeftRoleAppearance),
+        messageSideById: State.selfChatMessageSideById || {},
+    };
+
+    try {
+        localStorage.setItem(storageKey, JSON.stringify(payload));
+        // 兼容旧版本仅侧边存储键，避免升级后行为跳变
+        localStorage.setItem(SELF_CHAT_SEND_SIDE_STORAGE_KEY, payload.side);
+    } catch (error) {
+        console.warn('persistSelfChatRoleState failed:', error);
+    }
+}
+
+function normalizeSelfLeftRoleAppearance(raw) {
+    const data = raw && typeof raw === 'object' ? raw : {};
+    const name = typeof data.name === 'string' ? data.name.trim() : '';
+    const avatar = typeof data.avatar === 'string' ? data.avatar : '';
+    const bubble = typeof data.bubble === 'string' ? data.bubble : '';
+    const textColor = normalizeHexColor(data.textColor || data.text_color) || '';
+
+    return {
+        name: name.slice(0, 50),
+        avatar,
+        bubble,
+        textColor,
+    };
+}
+
+function ensureSelfChatRoleState() {
+    if (!Array.isArray(State.selfChatPendingSendSides)) {
+        State.selfChatPendingSendSides = [];
+    }
+
+    if (!State.selfChatMessageSideById || typeof State.selfChatMessageSideById !== 'object') {
+        State.selfChatMessageSideById = {};
+    }
+
+    if (!State.selfChatLeftRoleAppearance || typeof State.selfChatLeftRoleAppearance !== 'object') {
+        State.selfChatLeftRoleAppearance = {};
+    }
+
+    const storageKey = getSelfChatRoleStorageKey();
+    if (State.selfChatRoleStorageKey !== storageKey) {
+        let nextSide = 'right';
+        let nextLeftRoleAppearance = {};
+        let nextMessageSideById = {};
+
+        try {
+            const raw = localStorage.getItem(storageKey);
+            if (raw) {
+                const parsed = JSON.parse(raw);
+                nextSide = normalizeSelfSendSide(parsed && parsed.side);
+                nextLeftRoleAppearance = normalizeSelfLeftRoleAppearance(parsed && parsed.leftRoleAppearance);
+                if (parsed && parsed.messageSideById && typeof parsed.messageSideById === 'object') {
+                    nextMessageSideById = { ...parsed.messageSideById };
+                }
+            } else {
+                // 兼容旧版键：只迁移侧边
+                nextSide = normalizeSelfSendSide(localStorage.getItem(SELF_CHAT_SEND_SIDE_STORAGE_KEY));
+            }
+        } catch (error) {
+            console.warn('load self chat role state failed:', error);
+        }
+
+        State.selfChatSendSide = nextSide;
+        State.selfChatLeftRoleAppearance = nextLeftRoleAppearance;
+        State.selfChatMessageSideById = nextMessageSideById;
+        trimSelfChatMessageSideById();
+        State.selfChatRoleStorageKey = storageKey;
+    } else {
+        State.selfChatSendSide = normalizeSelfSendSide(State.selfChatSendSide);
+    }
+}
+
+function isMessageFromCurrentUser(sender) {
+    const currentUser = State.currentUser || {};
+    const meName = currentUser.name;
+    const meId = currentUser.id;
+    if (!sender || (!meName && (meId === null || meId === undefined))) {
+        return false;
+    }
+    return String(sender) === String(meName) || String(sender) === String(meId);
+}
+
+function isSelfConversationSelected() {
+    const selectedFriendName = State.selectedFriendName;
+    const meName = State.currentUser && State.currentUser.name;
+    if (!selectedFriendName || !meName) {
+        return false;
+    }
+    return String(selectedFriendName) === String(meName);
+}
+
+function updateSwitchRoleButtonUI() {
+    ensureSelfChatRoleState();
+    const button = document.getElementById('switch-role-btn');
+    if (!button) return;
+
+    const showButton = isSelfConversationSelected();
+    button.classList.toggle('hidden', !showButton);
+    if (!showButton) {
+        closeRoleSwitchEditorModal();
+        closeRoleSwitchSuccessModal();
+    }
+
+    const currentSide = normalizeSelfSendSide(State.selfChatSendSide);
+    button.title = currentSide === 'right'
+        ? '当前新消息显示在右侧，点击后切到左侧'
+        : '当前新消息显示在左侧，点击后切到右侧';
+}
+
+function buildCurrentSelfAppearance() {
+    const currentUser = State.currentUser || {};
+    const meSender = currentUser.name || String(currentUser.id || '');
+    const fallbackName = currentUser.name || '我';
+
+    return {
+        name: fallbackName,
+        avatar: getAvatarForSender(meSender) || DEFAULT_AVATAR_DATA_URI,
+        bubble: getBubbleForSender(meSender) || '',
+        textColor: normalizeHexColor(getBubbleTextColorForSender(meSender)) || SELF_CHAT_LEFT_ROLE_DEFAULT_TEXT_COLOR,
+    };
+}
+
+function getEffectiveSelfLeftRoleAppearance() {
+    ensureSelfChatRoleState();
+    const base = buildCurrentSelfAppearance();
+    const custom = normalizeSelfLeftRoleAppearance(State.selfChatLeftRoleAppearance);
+
+    return {
+        name: custom.name || base.name,
+        avatar: custom.avatar || base.avatar,
+        bubble: custom.bubble || base.bubble,
+        textColor: custom.textColor || base.textColor || SELF_CHAT_LEFT_ROLE_DEFAULT_TEXT_COLOR,
+    };
+}
+
+function setSelfChatSendSide(side) {
+    ensureSelfChatRoleState();
+    State.selfChatSendSide = normalizeSelfSendSide(side);
+    persistSelfChatRoleState();
+    updateSwitchRoleButtonUI();
+    renderMessages();
+}
+
+function openRoleSwitchSuccessModal() {
+    if (!RoleSwitchEditor.successModal) return;
+    RoleSwitchEditor.successModal.classList.remove('hidden');
+}
+
+function closeRoleSwitchSuccessModal() {
+    if (!RoleSwitchEditor.successModal) return;
+    RoleSwitchEditor.successModal.classList.add('hidden');
+}
+
+function openRoleSwitchCancelConfirmModal() {
+    if (!RoleSwitchEditor.cancelConfirmModal) return;
+    RoleSwitchEditor.cancelConfirmModal.classList.remove('hidden');
+}
+
+function closeRoleSwitchCancelConfirmModal() {
+    if (!RoleSwitchEditor.cancelConfirmModal) return;
+    RoleSwitchEditor.cancelConfirmModal.classList.add('hidden');
+}
+
+function renderRoleSwitchPreview() {
+    if (!RoleSwitchEditor.draft || !RoleSwitchEditor.previewAvatar || !RoleSwitchEditor.previewName || !RoleSwitchEditor.previewContent) {
+        return;
+    }
+
+    const draft = RoleSwitchEditor.draft;
+    const fallback = buildCurrentSelfAppearance();
+    const name = (draft.name || fallback.name || '我').trim();
+    const avatar = draft.avatar || fallback.avatar || DEFAULT_AVATAR_DATA_URI;
+    const bubble = draft.bubble || '';
+    const textColor = normalizeHexColor(draft.textColor || fallback.textColor) || SELF_CHAT_LEFT_ROLE_DEFAULT_TEXT_COLOR;
+
+    RoleSwitchEditor.previewAvatar.src = avatar;
+    RoleSwitchEditor.previewName.textContent = name;
+    RoleSwitchEditor.previewContent.textContent = '左侧示例消息';
+
+    const previewContent = RoleSwitchEditor.previewContent;
+    previewContent.className = bubble
+        ? 'message-content message-content-custom-bubble'
+        : 'message-content';
+
+    if (bubble) {
+        previewContent.style.setProperty('--bubble-image', `url('${escapeUrlForCss(bubble)}')`);
+        previewContent.style.setProperty('--bubble-text-color', textColor);
+        previewContent.style.color = textColor;
+    } else {
+        previewContent.style.removeProperty('--bubble-image');
+        previewContent.style.removeProperty('--bubble-text-color');
+        previewContent.style.color = textColor;
+    }
+}
+
+function readFileAsDataUrl(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ''));
+        reader.onerror = () => reject(new Error('读取文件失败'));
+        reader.readAsDataURL(file);
+    });
+}
+
+function blobToDataUrl(blob) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ''));
+        reader.onerror = () => reject(new Error('读取图片失败'));
+        reader.readAsDataURL(blob);
+    });
+}
+
+function openRoleSwitchEditorModal() {
+    initRoleSwitchEditorUI();
+    if (!RoleSwitchEditor.modal) return;
+
+    const fallback = getEffectiveSelfLeftRoleAppearance();
+
+    RoleSwitchEditor.draft = {
+        name: fallback.name,
+        avatar: fallback.avatar,
+        bubble: fallback.bubble,
+        textColor: fallback.textColor || SELF_CHAT_LEFT_ROLE_DEFAULT_TEXT_COLOR,
+    };
+
+    renderRoleSwitchPreview();
+    closeRoleSwitchCancelConfirmModal();
+    RoleSwitchEditor.modal.classList.remove('hidden');
+}
+
+function closeRoleSwitchEditorModal() {
+    if (!RoleSwitchEditor.modal) return;
+    RoleSwitchEditor.modal.classList.add('hidden');
+    closeRoleSwitchCancelConfirmModal();
+    RoleSwitchEditor.draft = null;
+}
+
+async function handleRoleSwitchChooseAvatar() {
+    if (!RoleSwitchEditor.avatarInput) return;
+    RoleSwitchEditor.avatarInput.value = '';
+    RoleSwitchEditor.avatarInput.click();
+}
+
+function startSelfRoleBubbleSelection() {
+    initBubbleComposerUI();
+    if (!RoleSwitchEditor.modal) return;
+
+    RoleSwitchEditor.modal.classList.add('hidden');
+    BubbleComposer.mode = 'self_role';
+    BubbleComposer.onLocalBubbleSelected = (bubbleDataUrl) => {
+        BubbleComposer.mode = 'friend';
+        BubbleComposer.onLocalBubbleSelected = null;
+        BubbleComposer.onLocalBubbleCancelled = null;
+        RoleSwitchEditor.draft = RoleSwitchEditor.draft || {};
+        RoleSwitchEditor.draft.bubble = bubbleDataUrl || '';
+        if (RoleSwitchEditor.modal) {
+            RoleSwitchEditor.modal.classList.remove('hidden');
+        }
+        renderRoleSwitchPreview();
+    };
+    BubbleComposer.onLocalBubbleCancelled = () => {
+        BubbleComposer.mode = 'friend';
+        BubbleComposer.onLocalBubbleSelected = null;
+        BubbleComposer.onLocalBubbleCancelled = null;
+        if (RoleSwitchEditor.modal) {
+            RoleSwitchEditor.modal.classList.remove('hidden');
+        }
+        renderRoleSwitchPreview();
+    };
+    BubbleComposer.currentFriendName = null;
+    openBubbleActionModal();
+}
+
+async function startSelfRoleTextColorSelection() {
+    initBubbleComposerUI();
+    if (!RoleSwitchEditor.modal) return;
+
+    const initial = normalizeHexColor(
+        RoleSwitchEditor.draft && RoleSwitchEditor.draft.textColor
+    ) || SELF_CHAT_LEFT_ROLE_DEFAULT_TEXT_COLOR;
+
+    RoleSwitchEditor.modal.classList.add('hidden');
+    BubbleComposer.previewBubbleOverride = (RoleSwitchEditor.draft && RoleSwitchEditor.draft.bubble) || null;
+
+    try {
+        const selectedColor = await openBubbleTextColorModal(initial);
+        if (selectedColor) {
+            RoleSwitchEditor.draft = RoleSwitchEditor.draft || {};
+            RoleSwitchEditor.draft.textColor = selectedColor;
+        }
+    } finally {
+        BubbleComposer.previewBubbleOverride = null;
+        hideAllBubbleModals();
+        if (RoleSwitchEditor.modal) {
+            RoleSwitchEditor.modal.classList.remove('hidden');
+        }
+        renderRoleSwitchPreview();
+    }
+}
+
+function completeRoleSwitchToLeft() {
+    if (!RoleSwitchEditor.draft) return;
+    State.selfChatLeftRoleAppearance = normalizeSelfLeftRoleAppearance(RoleSwitchEditor.draft);
+    persistSelfChatRoleState();
+    closeRoleSwitchEditorModal();
+    setSelfChatSendSide('left');
+    openRoleSwitchSuccessModal();
+}
+
+function cancelRoleSwitchEditing() {
+    openRoleSwitchCancelConfirmModal();
+}
+
+function confirmCancelRoleSwitchEditing() {
+    closeRoleSwitchCancelConfirmModal();
+    closeRoleSwitchEditorModal();
+}
+
+function rejectCancelRoleSwitchEditing() {
+    closeRoleSwitchCancelConfirmModal();
+    if (RoleSwitchEditor.modal) {
+        RoleSwitchEditor.modal.classList.remove('hidden');
+    }
+}
+
+async function handleSwitchRoleButtonClick() {
+    ensureSelfChatRoleState();
+    if (!isSelfConversationSelected()) {
+        return;
+    }
+
+    const currentSide = normalizeSelfSendSide(State.selfChatSendSide);
+    if (currentSide === 'right') {
+        openRoleSwitchEditorModal();
+        return;
+    }
+
+    setSelfChatSendSide('right');
+    openRoleSwitchSuccessModal();
+}
+
+function queueCurrentSelfMessageSide() {
+    ensureSelfChatRoleState();
+    if (!isSelfConversationSelected()) {
+        return;
+    }
+    State.selfChatPendingSendSides.push(normalizeSelfSendSide(State.selfChatSendSide));
+}
+
+function decorateIncomingMessageForDisplay(message, options = {}) {
+    ensureSelfChatRoleState();
+
+    if (!message || typeof message !== 'object') {
+        return message;
+    }
+
+    const normalizedMessage = { ...message };
+    if (!isSelfConversationSelected() || !isMessageFromCurrentUser(normalizedMessage.sender)) {
+        return normalizedMessage;
+    }
+
+    const messageId = normalizedMessage.id;
+    const messageKey = messageId === null || messageId === undefined ? null : String(messageId);
+    if (messageKey && State.selfChatMessageSideById[messageKey]) {
+        normalizedMessage._selfDisplaySide = State.selfChatMessageSideById[messageKey];
+        return normalizedMessage;
+    }
+
+    const isHistory = !!options.isHistory;
+    let displaySide = 'right';
+    if (!isHistory && State.selfChatPendingSendSides.length > 0) {
+        displaySide = normalizeSelfSendSide(State.selfChatPendingSendSides.shift());
+    }
+
+    normalizedMessage._selfDisplaySide = displaySide;
+    if (messageKey) {
+        State.selfChatMessageSideById[messageKey] = displaySide;
+        if (!isHistory) {
+            persistSelfChatRoleState();
+        }
+    }
+
+    return normalizedMessage;
+}
 
 const ChatModule = {
     rebuildAvatarMap(conversation) {
@@ -80,6 +534,8 @@ const ChatModule = {
         if (!friendName) return;
 
         State.setSelectedFriend(friendName);
+        ensureSelfChatRoleState();
+        State.selfChatPendingSendSides = [];
         localStorage.setItem('lastSelectedFriendName', friendName);
         FriendsModule.renderFriendsList();
 
@@ -140,6 +596,7 @@ const ChatModule = {
 
         header.classList.remove('hidden');
         inputArea.classList.remove('hidden');
+        updateSwitchRoleButtonUI();
     },
 
     resetChatPanel() {
@@ -149,6 +606,12 @@ const ChatModule = {
 
         document.getElementById('chat-header').classList.add('hidden');
         document.getElementById('input-area').classList.add('hidden');
+        const switchRoleBtn = document.getElementById('switch-role-btn');
+        if (switchRoleBtn) {
+            switchRoleBtn.classList.add('hidden');
+        }
+        closeRoleSwitchEditorModal();
+        closeRoleSwitchSuccessModal();
 
         const container = document.getElementById('messages-container');
         container.innerHTML = '<div class="empty-state">选择好友开始聊天</div>';
@@ -210,6 +673,11 @@ const ChatModule = {
         const input = document.getElementById('message-input');
         const imageBtn = document.getElementById('image-btn');
         const imageInput = document.getElementById('image-input');
+        const switchRoleBtn = document.getElementById('switch-role-btn');
+
+        ensureSelfChatRoleState();
+        initRoleSwitchEditorUI();
+        updateSwitchRoleButtonUI();
 
         sendBtn.addEventListener('click', () => this.handleSendMessage());
 
@@ -222,6 +690,9 @@ const ChatModule = {
 
         imageBtn.addEventListener('click', () => imageInput.click());
         imageInput.addEventListener('change', (event) => this.handleSendImage(event));
+        if (switchRoleBtn) {
+            switchRoleBtn.addEventListener('click', () => handleSwitchRoleButtonClick());
+        }
         initBubbleComposerUI();
     },
 
@@ -345,16 +816,33 @@ function renderMessages() {
         return;
     }
 
+    const inSelfConversation = isSelfConversationSelected();
+    const selfLeftAppearance = getEffectiveSelfLeftRoleAppearance();
+
     container.innerHTML = State.messages.map(msg => {
-        const mine = msg.sender === State.currentUser.name || msg.sender === String(State.currentUser.id);
+        const isOwnMessage = isMessageFromCurrentUser(msg.sender);
+        const selfDisplaySide = normalizeSelfSendSide(msg._selfDisplaySide);
+        const isLeftRoleMessage = inSelfConversation && isOwnMessage && selfDisplaySide === 'left';
+        const mine = isOwnMessage && !isLeftRoleMessage;
         const isImage = typeof msg.content === 'string' && msg.content.startsWith('/uploads/');
 
-        // avatar：从 avatar_map、friends 或默认中获取
-        const avatarUrl = getAvatarForSender(msg.sender);
-        const bubbleUrl = getBubbleForSender(msg.sender);
-        const textColor = isImage ? null : getBubbleTextColorForSender(msg.sender);
+        const avatarUrl = isLeftRoleMessage
+            ? (selfLeftAppearance.avatar || DEFAULT_AVATAR_DATA_URI)
+            : getAvatarForSender(msg.sender);
+        const bubbleUrl = isLeftRoleMessage
+            ? (selfLeftAppearance.bubble || null)
+            : getBubbleForSender(msg.sender);
+        const textColor = isImage
+            ? null
+            : (isLeftRoleMessage
+                ? (normalizeHexColor(selfLeftAppearance.textColor) || SELF_CHAT_LEFT_ROLE_DEFAULT_TEXT_COLOR)
+                : getBubbleTextColorForSender(msg.sender));
 
-        const senderDisplay = escapeHtml(msg.sender || '');
+        const senderDisplay = escapeHtml(
+            isLeftRoleMessage
+                ? (selfLeftAppearance.name || (State.currentUser && State.currentUser.name) || msg.sender || '')
+                : (msg.sender || '')
+        );
 
         const contentHtml = isImage
             ? `<img src="${msg.content}" alt="图片消息" class="message-image">`
@@ -364,7 +852,7 @@ function renderMessages() {
             : 'message-content';
         const bubbleStyle = bubbleUrl
             ? ` style="--bubble-image: url('${escapeUrlForCss(bubbleUrl)}');${textColor ? ` --bubble-text-color: ${textColor}; color: ${textColor};` : ''}"`
-            : '';
+            : (textColor ? ` style="color: ${textColor};"` : '');
 
         return `
             <div class="message-item ${mine ? 'mine' : 'other'}">
@@ -542,9 +1030,13 @@ function updateBubbleTextColorPreview(color) {
     const preview = BubbleComposer.textColorPreview;
     preview.style.color = normalized;
 
-    const myId = String((State.currentUser && State.currentUser.id) || '');
-    const currentMap = (State.avatarMap && State.avatarMap[myId]) || {};
-    const bubbleUrl = currentMap.bubble || null;
+    const bubbleUrl = BubbleComposer.previewBubbleOverride !== null
+        ? BubbleComposer.previewBubbleOverride
+        : (() => {
+            const myId = String((State.currentUser && State.currentUser.id) || '');
+            const currentMap = (State.avatarMap && State.avatarMap[myId]) || {};
+            return currentMap.bubble || null;
+        })();
 
     if (bubbleUrl) {
         preview.classList.add('bubble-text-color-preview-custom');
@@ -985,6 +1477,29 @@ async function setBubbleTextColorForFriend(friendName, color) {
 
 async function finishBubbleDrawing(options) {
     const { saveLocal } = options || {};
+    if (BubbleComposer.mode === 'self_role') {
+        if (!BubbleComposer.pendingBlob) {
+            throw new Error('没有可上传的绘制结果');
+        }
+
+        if (saveLocal) {
+            downloadBubbleBlob(BubbleComposer.pendingBlob, 'self-role');
+        }
+
+        const bubbleDataUrl = await blobToDataUrl(BubbleComposer.pendingBlob);
+        BubbleComposer.pendingBlob = null;
+        hideAllBubbleModals();
+
+        const onSelected = BubbleComposer.onLocalBubbleSelected;
+        BubbleComposer.mode = 'friend';
+        BubbleComposer.onLocalBubbleSelected = null;
+        BubbleComposer.onLocalBubbleCancelled = null;
+        if (typeof onSelected === 'function') {
+            onSelected(bubbleDataUrl);
+        }
+        return bubbleDataUrl;
+    }
+
     const friend = BubbleComposer.currentFriendName || resolveSelectedFriendName();
     if (!friend) {
         throw new Error('找不到当前好友');
@@ -1046,8 +1561,11 @@ function initBubbleComposerUI() {
 
     if (BubbleComposer.uploadExistingBtn) {
         BubbleComposer.uploadExistingBtn.addEventListener('click', () => {
-            hideAllBubbleModals();
             if (BubbleComposer.fileInput) {
+                if (BubbleComposer.mode !== 'self_role') {
+                    hideAllBubbleModals();
+                }
+                BubbleComposer.fileInput.value = '';
                 BubbleComposer.fileInput.click();
             }
         });
@@ -1062,6 +1580,9 @@ function initBubbleComposerUI() {
     if (BubbleComposer.actionCancelBtn) {
         BubbleComposer.actionCancelBtn.addEventListener('click', () => {
             hideAllBubbleModals();
+            if (BubbleComposer.mode === 'self_role' && typeof BubbleComposer.onLocalBubbleCancelled === 'function') {
+                BubbleComposer.onLocalBubbleCancelled();
+            }
         });
     }
 
@@ -1215,8 +1736,119 @@ function initBubbleComposerUI() {
     BubbleComposer.initialized = true;
 }
 
+function initRoleSwitchEditorUI() {
+    if (RoleSwitchEditor.initialized) return;
+
+    RoleSwitchEditor.modal = document.getElementById('role-switch-modal');
+    RoleSwitchEditor.cancelConfirmModal = document.getElementById('role-switch-cancel-confirm-modal');
+    RoleSwitchEditor.successModal = document.getElementById('role-switch-success-modal');
+    RoleSwitchEditor.previewAvatar = document.getElementById('role-switch-preview-avatar');
+    RoleSwitchEditor.previewName = document.getElementById('role-switch-preview-name');
+    RoleSwitchEditor.previewContent = document.getElementById('role-switch-preview-content');
+    RoleSwitchEditor.changeAvatarBtn = document.getElementById('role-switch-change-avatar-btn');
+    RoleSwitchEditor.changeNameBtn = document.getElementById('role-switch-change-name-btn');
+    RoleSwitchEditor.changeBubbleBtn = document.getElementById('role-switch-change-bubble-btn');
+    RoleSwitchEditor.changeTextColorBtn = document.getElementById('role-switch-change-text-color-btn');
+    RoleSwitchEditor.cancelBtn = document.getElementById('role-switch-cancel-btn');
+    RoleSwitchEditor.completeBtn = document.getElementById('role-switch-complete-btn');
+    RoleSwitchEditor.avatarInput = document.getElementById('role-switch-avatar-input');
+    RoleSwitchEditor.cancelYesBtn = document.getElementById('role-switch-cancel-yes-btn');
+    RoleSwitchEditor.cancelNoBtn = document.getElementById('role-switch-cancel-no-btn');
+    RoleSwitchEditor.successConfirmBtn = document.getElementById('role-switch-success-confirm-btn');
+
+    if (RoleSwitchEditor.changeAvatarBtn) {
+        RoleSwitchEditor.changeAvatarBtn.addEventListener('click', () => {
+            handleRoleSwitchChooseAvatar();
+        });
+    }
+
+    if (RoleSwitchEditor.avatarInput) {
+        RoleSwitchEditor.avatarInput.addEventListener('change', async (event) => {
+            const file = event.target.files && event.target.files[0];
+            if (!file) return;
+            try {
+                const dataUrl = await readFileAsDataUrl(file);
+                RoleSwitchEditor.draft = RoleSwitchEditor.draft || {};
+                RoleSwitchEditor.draft.avatar = dataUrl;
+                renderRoleSwitchPreview();
+            } catch (error) {
+                if (typeof showErrorToast === 'function') {
+                    showErrorToast('头像读取失败: ' + (error.message || error));
+                }
+            } finally {
+                event.target.value = '';
+            }
+        });
+    }
+
+    if (RoleSwitchEditor.changeNameBtn) {
+        RoleSwitchEditor.changeNameBtn.addEventListener('click', () => {
+            const currentName = (RoleSwitchEditor.draft && RoleSwitchEditor.draft.name) || '';
+            const next = window.prompt('请输入左侧角色账号名', currentName);
+            if (next === null) return;
+            const value = String(next).trim();
+            if (!value) {
+                if (typeof showErrorToast === 'function') {
+                    showErrorToast('账号名不能为空');
+                }
+                return;
+            }
+            RoleSwitchEditor.draft = RoleSwitchEditor.draft || {};
+            RoleSwitchEditor.draft.name = value.slice(0, 50);
+            renderRoleSwitchPreview();
+        });
+    }
+
+    if (RoleSwitchEditor.changeBubbleBtn) {
+        RoleSwitchEditor.changeBubbleBtn.addEventListener('click', () => {
+            startSelfRoleBubbleSelection();
+        });
+    }
+
+    if (RoleSwitchEditor.changeTextColorBtn) {
+        RoleSwitchEditor.changeTextColorBtn.addEventListener('click', () => {
+            startSelfRoleTextColorSelection();
+        });
+    }
+
+    if (RoleSwitchEditor.cancelBtn) {
+        RoleSwitchEditor.cancelBtn.addEventListener('click', () => {
+            cancelRoleSwitchEditing();
+        });
+    }
+
+    if (RoleSwitchEditor.completeBtn) {
+        RoleSwitchEditor.completeBtn.addEventListener('click', () => {
+            completeRoleSwitchToLeft();
+        });
+    }
+
+    if (RoleSwitchEditor.cancelYesBtn) {
+        RoleSwitchEditor.cancelYesBtn.addEventListener('click', () => {
+            confirmCancelRoleSwitchEditing();
+        });
+    }
+
+    if (RoleSwitchEditor.cancelNoBtn) {
+        RoleSwitchEditor.cancelNoBtn.addEventListener('click', () => {
+            rejectCancelRoleSwitchEditing();
+        });
+    }
+
+    if (RoleSwitchEditor.successConfirmBtn) {
+        RoleSwitchEditor.successConfirmBtn.addEventListener('click', () => {
+            closeRoleSwitchSuccessModal();
+        });
+    }
+
+    RoleSwitchEditor.initialized = true;
+}
+
 window.chooseSpecialBubble = function () {
     initBubbleComposerUI();
+    BubbleComposer.mode = 'friend';
+    BubbleComposer.onLocalBubbleSelected = null;
+    BubbleComposer.onLocalBubbleCancelled = null;
     const friend = resolveSelectedFriendName();
     if (!friend) {
         alert("找不到当前好友，请先打开与好友的聊天窗口再设置专属气泡。");
@@ -1228,6 +1860,7 @@ window.chooseSpecialBubble = function () {
 
 window.chooseSpecialTextColor = async function () {
     initBubbleComposerUI();
+    BubbleComposer.previewBubbleOverride = null;
     const friend = resolveSelectedFriendName();
     if (!friend) {
         alert("找不到当前好友，请先打开与好友的聊天窗口再设置专属文字颜色。");
@@ -1267,6 +1900,41 @@ window.uploadSpecialBubble = async function () {
     const input = document.getElementById("specialBubbleInput");
     const file = input && input.files ? input.files[0] : null;
     if (!file) {
+        if (BubbleComposer.mode === 'self_role' && typeof BubbleComposer.onLocalBubbleCancelled === 'function') {
+            BubbleComposer.onLocalBubbleCancelled();
+        } else if (BubbleComposer.mode === 'self_role') {
+            BubbleComposer.mode = 'friend';
+            BubbleComposer.onLocalBubbleSelected = null;
+            BubbleComposer.onLocalBubbleCancelled = null;
+        }
+        return;
+    }
+
+    if (BubbleComposer.mode === 'self_role') {
+        try {
+            const bubbleDataUrl = await readFileAsDataUrl(file);
+            hideAllBubbleModals();
+            const onSelected = BubbleComposer.onLocalBubbleSelected;
+            BubbleComposer.mode = 'friend';
+            BubbleComposer.onLocalBubbleSelected = null;
+            BubbleComposer.onLocalBubbleCancelled = null;
+            if (typeof onSelected === 'function') {
+                onSelected(bubbleDataUrl);
+            }
+        } catch (error) {
+            if (typeof showErrorToast === 'function') {
+                showErrorToast('读取气泡图片失败: ' + (error.message || error));
+            }
+            if (typeof BubbleComposer.onLocalBubbleCancelled === 'function') {
+                BubbleComposer.onLocalBubbleCancelled();
+            } else {
+                BubbleComposer.mode = 'friend';
+                BubbleComposer.onLocalBubbleSelected = null;
+                BubbleComposer.onLocalBubbleCancelled = null;
+            }
+        } finally {
+            if (input) input.value = '';
+        }
         return;
     }
 
@@ -1400,5 +2068,8 @@ window.setupGlobalAvatarUpload = setupGlobalAvatarUpload;
 window.ChatModule = ChatModule;
 window.renderMessages = renderMessages;
 window.scrollMessagesToBottom = scrollMessagesToBottom;
+window.decorateIncomingMessageForDisplay = decorateIncomingMessageForDisplay;
+window.queueCurrentSelfMessageSide = queueCurrentSelfMessageSide;
+window.updateSwitchRoleButtonUI = updateSwitchRoleButtonUI;
 
 console.log("chat.js loaded");

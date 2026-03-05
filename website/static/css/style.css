@@ -995,6 +995,52 @@ body {
     background: transparent;
 }
 
+/* ==================== 切换角色弹窗 ==================== */
+.role-switch-panel {
+    max-width: 560px;
+}
+
+.role-switch-preview-wrap {
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    background: #f8fafc;
+    padding: 12px;
+    margin-bottom: 14px;
+}
+
+.role-switch-preview-item {
+    margin: 0;
+}
+
+.role-switch-preview-item .message-body {
+    max-width: 100%;
+}
+
+.role-switch-action-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    margin-bottom: 14px;
+}
+
+.role-switch-action-grid .btn {
+    justify-content: center;
+}
+
+.role-switch-footer {
+    justify-content: flex-end;
+}
+
+.role-switch-confirm-panel,
+.role-switch-success-panel {
+    max-width: 360px;
+}
+
+.role-switch-confirm-actions,
+.role-switch-success-actions {
+    justify-content: center;
+}
+
 @keyframes slideUp {
     from {
         transform: translateY(100%);
@@ -1057,5 +1103,9 @@ body {
 
     .input-area {
         padding: 12px;
+    }
+
+    .role-switch-action-grid {
+        grid-template-columns: 1fr;
     }
 }

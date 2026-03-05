@@ -110,6 +110,10 @@ const SocketManager = {
             return;
         }
 
+        if (typeof window.queueCurrentSelfMessageSide === 'function') {
+            window.queueCurrentSelfMessageSide();
+        }
+
         socket.emit('conversationMessage', {
             conversation_id: conversationId,
             content: content,
@@ -126,6 +130,10 @@ const SocketManager = {
         if (!socket) {
             showErrorToast('连接未建立');
             return;
+        }
+
+        if (typeof window.queueCurrentSelfMessageSide === 'function') {
+            window.queueCurrentSelfMessageSide();
         }
 
         socket.emit('conversationImage', {
@@ -172,7 +180,10 @@ const SocketManager = {
 
         // 检查消息是否属于当前会话
         if (message.conversation_id === State.currentConversationId) {
-            State.addMessage(message);
+            const decorated = typeof window.decorateIncomingMessageForDisplay === 'function'
+                ? window.decorateIncomingMessageForDisplay(message, { isHistory: false })
+                : message;
+            State.addMessage(decorated);
             renderMessages();
             scrollMessagesToBottom();
         }
@@ -185,7 +196,12 @@ const SocketManager = {
         console.log('收到历史消息:', data);
 
         if (data.conversation_id === State.currentConversationId) {
-            State.setMessages(data.messages || []);
+            const messages = (data.messages || []).map((message) =>
+                typeof window.decorateIncomingMessageForDisplay === 'function'
+                    ? window.decorateIncomingMessageForDisplay(message, { isHistory: true })
+                    : message
+            );
+            State.setMessages(messages);
             renderMessages();
             scrollMessagesToBottom();
         }
