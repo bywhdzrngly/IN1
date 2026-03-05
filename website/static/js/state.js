@@ -22,6 +22,11 @@ const State = {
     currentConversationId: null,
     messages: [],              // 当前会话的消息列表
     messageInput: '',          // 输入框内容
+    selfChatSendSide: 'right', // 自聊时“我发出的新消息”显示侧
+    selfChatPendingSendSides: [],
+    selfChatMessageSideById: {},
+    selfChatLeftRoleAppearance: {}, // 自聊左侧角色装扮（仅本地生效）
+    selfChatRoleStorageKey: null,
 
     // Socket 连接
     socket: null,
@@ -165,6 +170,11 @@ const State = {
         this.selectedFriendName = null;
         this.currentConversationId = null;
         this.messages = [];
+        this.selfChatSendSide = 'right';
+        this.selfChatPendingSendSides = [];
+        this.selfChatMessageSideById = {};
+        this.selfChatLeftRoleAppearance = {};
+        this.selfChatRoleStorageKey = null;
         this.searchQuery = '';
         this.searchResults = [];
         this.error = null;

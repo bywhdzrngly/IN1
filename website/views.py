@@ -8,6 +8,8 @@ import uuid
 import re
 from werkzeug.utils import secure_filename
 from sqlalchemy.exc import IntegrityError
+from flask import session
+from flask_login import logout_user
 
 views = Blueprint("views", __name__)
 HEX_COLOR_RE = re.compile(r'^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$')
@@ -53,6 +55,20 @@ def _normalize_hex_color(value):
     if len(color) == 4:
         color = "#" + "".join(ch * 2 for ch in color[1:])
     return color.lower()
+
+
+def _ensure_self_friendship(user):
+    if not user:
+        return None
+
+    friendship = Friendship.query.filter_by(user1_id=user.id, user2_id=user.id).first()
+    if friendship:
+        return friendship
+
+    friendship = Friendship(user1_id=user.id, user2_id=user.id, timestamp=datetime.utcnow())
+    db.session.add(friendship)
+    db.session.commit()
+    return friendship
 
 '''
 路由(Route)本质是"URL 地址"与"后端处理函数"的映射关系,Flask 通过装饰器 @app.route() 来定义路由。比如 @app.route('/chat') 就是把 /chat 地址和 chat() 函数关联起来,当用户访问 /chat 时,就会执行 chat() 函数里的代码。
@@ -107,25 +123,6 @@ def upload_bubble_local(file, upload_folder):
     file.save(file_path)
     return f"/uploads/bubbles/{filename}"
 
-def get_display_avatar(sender_id, friendship):
-    """
-    根据发送者ID和友谊对象返回要显示的头像URL。
-    优先返回专属头像，否则返回发送者的全局头像。
-    """
-    if sender_id == friendship.user1_id:
-        avatar = friendship.image_by_user1
-    elif sender_id == friendship.user2_id:
-        avatar = friendship.image_by_user2
-    else:
-        return None  # 发送者不在友谊中
-
-    if avatar:
-        return avatar
-
-    # 回退到全局头像
-    sender = User.query.get(sender_id)
-    return sender.image if sender else None
-
 
 @views.route("/")
 @login_required
@@ -158,6 +155,66 @@ def get_current_user():
         "image": current_user.image,
     })
 
+@views.route('/user', methods=['DELETE'])
+@login_required
+def delete_user():
+    user = User.query.get(current_user.id)
+    if not user:
+        return jsonify({"error": "user not found"}), 404
+
+    old_name = user.name
+    usernames_to_notify = set()# 建一个集合用来放friendship或者其他关系里面的对面用户
+
+    try:
+        # 1. 删除friendship
+        friendships = Friendship.query.filter(
+            (Friendship.user1_id == user.id) | (Friendship.user2_id == user.id)
+        ).all()
+        for f in friendships:
+            if f.user1_id == user.id and f.user2:
+                usernames_to_notify.add(f.user2.name) #将对面用户放入集合
+            elif f.user2_id == user.id and f.user1:
+                usernames_to_notify.add(f.user1.name)
+            db.session.delete(f)
+
+        # 2. 删除好友请求
+        friend_requests = FriendRequest.query.filter(
+            (FriendRequest.from_user == user.name) | (FriendRequest.to_user == user.name)
+        ).all()
+        for req in friend_requests:
+            if req.from_user == user.name:
+                usernames_to_notify.add(req.to_user)
+            else:
+                usernames_to_notify.add(req.from_user)
+            db.session.delete(req)
+
+        # 3. 删除对话及消息
+        convs = Conversation.query.filter(
+            (Conversation.user1 == user.name) | (Conversation.user2 == user.name)
+        ).all()
+        conv_ids = [c.id for c in convs]
+        if conv_ids:
+            Message.query.filter(Message.conversation_id.in_(conv_ids)).delete(synchronize_session=False)
+        for c in convs:
+            db.session.delete(c)
+
+        # 4. 最后删除用户自身
+        User.query.filter(User.id == user.id).delete()
+
+        db.session.commit()
+
+        # 通知集合中的用户
+        _emit_friend_data_changed(old_name, *usernames_to_notify)
+
+        logout_user()
+        session.clear()
+
+        return jsonify({"status": "ok", "message": "User deleted successfully"}), 200
+
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error deleting user: {e}", exc_info=True)
+        return jsonify({"error": "database error"}), 500
 
 @views.route('/user/name', methods=['POST'])
 def update_user_name():
@@ -267,25 +324,27 @@ def update_avatar():
 @login_required
 def get_or_create_conversation(username):
     me = current_user
-    if username == me.name:
-        return jsonify({"error": "cannot chat with yourself"}), 400
-
     target = User.query.filter_by(name=username).first()
     if not target:
         return jsonify({"error": "user not found"}), 404
 
-    # 获取记录（按 ID 排序）
-    user1_id = min(me.id, target.id)
-    user2_id = max(me.id, target.id)
-    friendship = Friendship.query.filter_by(user1_id=user1_id, user2_id=user2_id).first()
-    if not friendship:
-        return jsonify({"error": "not friends"}), 403
-
-    # 确定对话中 user1/user2 的顺序：ID 小的为 user1
-    if me.id < target.id:
-        conv_user1, conv_user2 = me.name, target.name
+    is_self_chat = me.id == target.id
+    if is_self_chat:
+        friendship = _ensure_self_friendship(me)
+        conv_user1, conv_user2 = me.name, me.name
     else:
-        conv_user1, conv_user2 = target.name, me.name
+        # 获取记录（按 ID 排序）
+        user1_id = min(me.id, target.id)
+        user2_id = max(me.id, target.id)
+        friendship = Friendship.query.filter_by(user1_id=user1_id, user2_id=user2_id).first()
+        if not friendship:
+            return jsonify({"error": "not friends"}), 403
+
+        # 确定对话中 user1/user2 的顺序：ID 小的为 user1
+        if me.id < target.id:
+            conv_user1, conv_user2 = me.name, target.name
+        else:
+            conv_user1, conv_user2 = target.name, me.name
 
     # 获取或创建对话
     conv = Conversation.query.filter_by(user1=conv_user1, user2=conv_user2).first()
@@ -294,25 +353,33 @@ def get_or_create_conversation(username):
         db.session.add(conv)
         db.session.commit()
 
-    avatar_map = {
-        str(me.id): {
-            "global": me.image,
-
-            "special": friendship.image_by_user1 if me.id == friendship.user1_id else friendship.image_by_user2,
-            "bubble": friendship.bubble1 if me.id == friendship.user1_id else friendship.bubble2,
-            "text_color": friendship.bubble_text_color1 if me.id == friendship.user1_id else friendship.bubble_text_color2,
-        },
-        str(target.id): {
-            "global": target.image,
-            "special": friendship.image_by_user2 if me.id == friendship.user1_id else friendship.image_by_user1,
-            "bubble": friendship.bubble2 if me.id == friendship.user1_id else friendship.bubble1,
-            "text_color": friendship.bubble_text_color2 if me.id == friendship.user1_id else friendship.bubble_text_color1,
+    if is_self_chat:
+        avatar_map = {
+            str(me.id): {
+                "global": me.image,
+                "special": friendship.image_by_user1 or friendship.image_by_user2,
+                "bubble": friendship.bubble1 or friendship.bubble2,
+                "text_color": friendship.bubble_text_color1 or friendship.bubble_text_color2,
+            }
         }
-    }
+    else:
+        avatar_map = {
+            str(me.id): {
+                "global": me.image,
+                "special": friendship.image_by_user1 if me.id == friendship.user1_id else friendship.image_by_user2,
+                "bubble": friendship.bubble1 if me.id == friendship.user1_id else friendship.bubble2,
+                "text_color": friendship.bubble_text_color1 if me.id == friendship.user1_id else friendship.bubble_text_color2,
+            },
+            str(target.id): {
+                "global": target.image,
+                "special": friendship.image_by_user2 if me.id == friendship.user1_id else friendship.image_by_user1,
+                "bubble": friendship.bubble2 if me.id == friendship.user1_id else friendship.bubble1,
+                "text_color": friendship.bubble_text_color2 if me.id == friendship.user1_id else friendship.bubble_text_color1,
+            }
+        }
 
     conversation_data = conv.getJsonData()
-
-    # 兼容前端历史字段名：avatar_map（当前使用）与 map（旧字段）
+    # 兼容前端字段：avatar_map（当前使用）与 map（旧字段）
     conversation_data['avatar_map'] = avatar_map
     conversation_data['map'] = avatar_map
 
@@ -337,18 +404,20 @@ def send_message():
     if current_user.name not in (conv.user1, conv.user2):
         return jsonify({"error": "forbidden"}), 403
 
-    # 获取对话双方的 User 对象
-    user1 = User.query.filter_by(name=conv.user1).first()
-    user2 = User.query.filter_by(name=conv.user2).first()
-    if not user1 or not user2:
-        return jsonify({"error": "conversation participants invalid"}), 500
+    if conv.user1 == conv.user2:
+        pass
+    else:
+        user1 = User.query.filter_by(name=conv.user1).first()
+        user2 = User.query.filter_by(name=conv.user2).first()
+        if not user1 or not user2:
+            return jsonify({"error": "conversation participants invalid"}), 500
 
-    # 检查是否仍是好友（用 ID）
-    user1_id = min(user1.id, user2.id)
-    user2_id = max(user1.id, user2.id)
-    is_friend = Friendship.query.filter_by(user1_id=user1_id, user2_id=user2_id).first()
-    if not is_friend:
-        return jsonify({"error": "not friends"}), 403
+        # 检查是否仍是好友（用 ID）
+        user1_id = min(user1.id, user2.id)
+        user2_id = max(user1.id, user2.id)
+        is_friend = Friendship.query.filter_by(user1_id=user1_id, user2_id=user2_id).first()
+        if not is_friend:
+            return jsonify({"error": "not friends"}), 403
 
     msg = Message(
         conversation_id=conversation_id,
@@ -378,18 +447,21 @@ def upload_message_image():
     if current_user.name not in (conv.user1, conv.user2):
         return jsonify({"error": "forbidden"}), 403
 
-    # 获取对话双方的用户对象（用于后续查询友谊）
-    user1 = User.query.filter_by(name=conv.user1).first()
-    user2 = User.query.filter_by(name=conv.user2).first()
-    if not user1 or not user2:
-        return jsonify({"error": "invalid conversation participants"}), 500
+    if conv.user1 == conv.user2:
+        _ensure_self_friendship(current_user)
+    else:
+        # 获取对话双方的用户对象（用于后续查询友谊）
+        user1 = User.query.filter_by(name=conv.user1).first()
+        user2 = User.query.filter_by(name=conv.user2).first()
+        if not user1 or not user2:
+            return jsonify({"error": "invalid conversation participants"}), 500
 
-    # 使用 ID 检查友谊
-    user1_id = min(user1.id, user2.id)
-    user2_id = max(user1.id, user2.id)
-    is_friend = Friendship.query.filter_by(user1_id=user1_id, user2_id=user2_id).first()
-    if not is_friend:
-        return jsonify({"error": "not friends"}), 403
+        # 使用 ID 检查友谊
+        user1_id = min(user1.id, user2.id)
+        user2_id = max(user1.id, user2.id)
+        is_friend = Friendship.query.filter_by(user1_id=user1_id, user2_id=user2_id).first()
+        if not is_friend:
+            return jsonify({"error": "not friends"}), 403
 
     image = request.files.get('image')
     if not image or image.filename == '':
@@ -430,6 +502,8 @@ def get_messages(conversation_id):
 @login_required
 def list_friends():
     me = current_user
+    _ensure_self_friendship(me)
+
     friendships = Friendship.query.filter(
         (Friendship.user1_id == me.id) | (Friendship.user2_id == me.id)
     ).all()
@@ -437,11 +511,39 @@ def list_friends():
     friends = []
     for f in friendships:
         friend_user = f.user2 if f.user1_id == me.id else f.user1
+        remark_name = f.remark_by_user1 if f.user1_id == me.id else f.remark_by_user2
+
+        if me.id == friend_user.id:
+            conv_user1, conv_user2 = me.name, me.name
+        elif me.id < friend_user.id:
+            conv_user1, conv_user2 = me.name, friend_user.name
+        else:
+            conv_user1, conv_user2 = friend_user.name, me.name
+
+        conv = Conversation.query.filter_by(user1=conv_user1, user2=conv_user2).first()
+        last_msg_preview = ''
+        last_msg_timestamp = None
+        if conv:
+            last_msg = Message.query.filter_by(conversation_id=conv.id).order_by(
+                Message.timestamp.desc(),
+                Message.id.desc(),
+            ).first()
+            if last_msg:
+                content = (last_msg.content or '').strip()
+                if content.startswith('/uploads/'):
+                    last_msg_preview = '[图片]'
+                else:
+                    last_msg_preview = content
+                last_msg_timestamp = last_msg.timestamp.isoformat() if last_msg.timestamp else None
+
         friends.append({
             "id": friend_user.id,
             "name": friend_user.name,
             "email": friend_user.email,
             "image": friend_user.image,
+            "remark_name": remark_name,
+            "last_message_preview": last_msg_preview,
+            "last_message_timestamp": last_msg_timestamp,
         })
 
     return jsonify({"friends": friends})
@@ -725,6 +827,64 @@ def set_friend_bubble_text_color():
 
     _emit_friend_data_changed(current_user.name, target.name)
     return jsonify({"status": "ok", "text_color": normalized_color})
+
+
+@views.route('/friend/set_remark', methods=['POST'])
+@login_required
+def set_friend_remark():
+    data = request.get_json(silent=True) or {}
+    friend_param = data.get('friend')
+    if friend_param is None:
+        friend_param = request.form.get('friend')
+
+    remark_name = data.get('remark_name')
+    if remark_name is None:
+        remark_name = request.form.get('remark_name')
+    if remark_name is None:
+        remark_name = data.get('remark')
+    if remark_name is None:
+        remark_name = request.form.get('remark')
+
+    if not friend_param:
+        return jsonify({"error": "missing friend"}), 400
+    if remark_name is None:
+        return jsonify({"error": "missing remark_name"}), 400
+
+    normalized_remark = str(remark_name).strip()
+    if len(normalized_remark) > 80:
+        return jsonify({"error": "remark too long"}), 400
+
+    target = None
+    if str(friend_param).isdigit():
+        target = User.query.filter_by(id=int(friend_param)).first()
+    if not target:
+        target = User.query.filter_by(name=str(friend_param)).first()
+    if not target:
+        return jsonify({"error": "user not found"}), 404
+
+    user1_id = min(current_user.id, target.id)
+    user2_id = max(current_user.id, target.id)
+    friendship = Friendship.query.filter_by(user1_id=user1_id, user2_id=user2_id).first()
+    if not friendship:
+        return jsonify({"error": "not friends"}), 403
+
+    store_value = normalized_remark or None
+    if current_user.id == friendship.user1_id:
+        friendship.remark_by_user1 = store_value
+    else:
+        friendship.remark_by_user2 = store_value
+
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("set_friend_remark database error")
+        return jsonify({"error": "database error"}), 500
+
+    _emit_friend_data_changed(current_user.name, target.name)
+    return jsonify({"status": "ok", "remark_name": normalized_remark})
+
+
 @views.route('/users', methods=['GET'])
 @login_required
 def list_all_users():

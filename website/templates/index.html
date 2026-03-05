@@ -163,6 +163,7 @@
                                 设置专属文字颜色
                             </button>
                         </form>
+                        <button id="switch-role-btn" type="button" class="hidden">切换角色</button>
                         <button id="delete-friend-btn" class="btn btn-danger btn-small">删除好友</button>
                     </div>
 
@@ -206,6 +207,27 @@
 
         <!-- 全局错误提示 -->
         <div id="error-toast" class="error-toast hidden"></div>
+
+        <!-- 好友备注名弹窗 -->
+        <div id="friend-remark-modal" class="bubble-modal hidden">
+            <div class="bubble-modal-panel friend-remark-panel">
+                <h3>修改备注名</h3>
+                <p id="friend-remark-account" class="bubble-modal-tip"></p>
+                <div class="friend-remark-input-wrap">
+                    <input
+                        id="friend-remark-input"
+                        class="friend-remark-input"
+                        type="text"
+                        maxlength="80"
+                        placeholder="请输入备注名（留空表示清除备注）"
+                    >
+                </div>
+                <div class="bubble-modal-actions friend-remark-actions">
+                    <button id="friend-remark-cancel-btn" type="button" class="btn">取消</button>
+                    <button id="friend-remark-confirm-btn" type="button" class="btn btn-primary">完成</button>
+                </div>
+            </div>
+        </div>
 
         <!-- 专属气泡：选择上传方式 -->
         <div id="bubble-action-modal" class="bubble-modal hidden">
@@ -291,6 +313,60 @@
                 <div class="bubble-modal-actions">
                     <button id="bubble-text-color-confirm-btn" class="btn btn-primary">完成</button>
                     <button id="bubble-text-color-cancel-btn" class="btn">取消</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 切换角色：编辑左侧角色 -->
+        <div id="role-switch-modal" class="bubble-modal hidden">
+            <div class="bubble-modal-panel role-switch-panel">
+                <h3>选择你的角色</h3>
+                <p class="bubble-modal-tip">以下修改仅对和自己聊天时左侧消息生效。</p>
+
+                <div class="role-switch-preview-wrap">
+                    <div class="message-item other role-switch-preview-item">
+                        <img id="role-switch-preview-avatar" class="message-avatar" src="" alt="avatar">
+                        <div class="message-body">
+                            <div id="role-switch-preview-name" class="message-meta"></div>
+                            <div id="role-switch-preview-content" class="message-content">左侧示例消息</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="role-switch-action-grid">
+                    <button id="role-switch-change-avatar-btn" type="button" class="btn">修改头像</button>
+                    <button id="role-switch-change-name-btn" type="button" class="btn">修改账号名</button>
+                    <button id="role-switch-change-bubble-btn" type="button" class="btn">修改气泡</button>
+                    <button id="role-switch-change-text-color-btn" type="button" class="btn">修改文字颜色</button>
+                </div>
+
+                <div class="bubble-modal-actions role-switch-footer">
+                    <button id="role-switch-cancel-btn" type="button" class="btn">取消</button>
+                    <button id="role-switch-complete-btn" type="button" class="btn btn-primary">完成</button>
+                </div>
+
+                <input type="file" id="role-switch-avatar-input" accept="image/*" style="display:none">
+            </div>
+        </div>
+
+        <!-- 切换角色：取消确认 -->
+        <div id="role-switch-cancel-confirm-modal" class="bubble-modal hidden">
+            <div class="bubble-modal-panel role-switch-confirm-panel">
+                <h3>提示</h3>
+                <p class="bubble-modal-tip">当前修改将不会被保留，是否仍要退出？</p>
+                <div class="bubble-modal-actions role-switch-confirm-actions">
+                    <button id="role-switch-cancel-yes-btn" type="button" class="btn btn-danger">是</button>
+                    <button id="role-switch-cancel-no-btn" type="button" class="btn btn-primary">否</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 切换角色：成功提示 -->
+        <div id="role-switch-success-modal" class="bubble-modal hidden">
+            <div class="bubble-modal-panel role-switch-success-panel">
+                <h3>切换角色成功</h3>
+                <div class="bubble-modal-actions role-switch-success-actions">
+                    <button id="role-switch-success-confirm-btn" type="button" class="btn btn-primary">确认</button>
                 </div>
             </div>
         </div>

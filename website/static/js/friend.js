@@ -5,6 +5,16 @@
 
 const FriendsModule = {
     /**
+     * 判断是否是当前登录用户自己
+     */
+    isSelfFriendName(friendName) {
+        if (!friendName || !State.currentUser || !State.currentUser.name) {
+            return false;
+        }
+        return String(friendName) === String(State.currentUser.name);
+    },
+
+    /**
      * 初始化好友模块
      */
     init() {
@@ -92,8 +102,8 @@ const FriendsModule = {
             <div class="friend-item ${State.selectedFriendName === friend.name ? 'active' : ''}" data-friend="${friend.name}">
                 <img src="${friend.image || this.getDefaultAvatar()}" alt="头像" class="friend-avatar">
                 <div class="friend-info">
-                    <div class="friend-name">${this.escapeHtml(friend.name || '')}</div>
-                    <div class="friend-time">${this.escapeHtml(friend.email || '')}</div>
+                    <div class="friend-name">${this.formatFriendDisplayName(friend)}</div>
+                    <div class="friend-time">${this.escapeHtml(friend.last_message_preview || '暂无消息')}</div>
                 </div>
             </div>
         `).join('');
@@ -216,6 +226,9 @@ const FriendsModule = {
                     name: request.from_user,
                     email: request.from_user_email || '',
                     image: request.from_user_image || '',
+                    remark_name: '',
+                    last_message_preview: '',
+                    last_message_timestamp: null,
                 });
 
                 State.removeFriendRequest(requestId);
@@ -257,6 +270,11 @@ const FriendsModule = {
     async handleDeleteFriend() {
         if (!State.selectedFriendName) return;
 
+        if (this.isSelfFriendName(State.selectedFriendName)) {
+            showErrorToast('不能删除自己');
+            return;
+        }
+
         if (!confirm(`确定要删除好友 ${State.selectedFriendName} 吗？`)) {
             return;
         }
@@ -284,6 +302,21 @@ const FriendsModule = {
      */
     getDefaultAvatar() {
         return 'data:image/svg+xml,%3Csvg%20xmlns%3D%22http://www.w3.org/2000/svg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22currentColor%22%3E%3Ccircle%20cx%3D%2212%22%20cy%3D%2212%22%20r%3D%2210%22/%3E%3Cpath%20d%3D%22M12%2012c2.21%200%204-1.79%204-4s-1.79-4-4-4-4%201.79-4%204%201.79%204%204%204zm0%202c-2.67%200-8%201.34-8%204v2h16v-2c0-2.66-5.33-4-8-4z%22/%3E%3C/svg%3E';
+    },
+
+    /**
+     * 好友显示名：备注名（原账号名）
+     */
+    formatFriendDisplayName(friend) {
+        const safeName = this.escapeHtml((friend && friend.name) || '');
+        const remarkRaw = friend && typeof friend.remark_name === 'string'
+            ? friend.remark_name.trim()
+            : '';
+        if (!remarkRaw) {
+            return safeName;
+        }
+        const safeRemark = this.escapeHtml(remarkRaw);
+        return `${safeRemark}<span class="remark-origin-name">（${safeName}）</span>`;
     },
 
     /**

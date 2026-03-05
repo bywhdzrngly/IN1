@@ -428,10 +428,18 @@ body {
     text-overflow: ellipsis;
 }
 
+.remark-origin-name {
+    color: #5f6368;
+    font-weight: 400;
+}
+
 .friend-time {
     font-size: 12px;
     color: var(--text-muted);
     margin-top: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .request-item {
@@ -523,6 +531,15 @@ body {
     color: var(--text-dark);
 }
 
+.chat-friend-name.clickable {
+    cursor: pointer;
+}
+
+.chat-friend-name.clickable:hover {
+    color: var(--primary-color);
+    text-decoration: underline;
+}
+
 .chat-status {
     font-size: 12px;
     color: var(--text-muted);
@@ -604,6 +621,7 @@ body {
     background-color: var(--primary-color);
     color: white;
     border-bottom-right-radius: 2px;
+    text-align: left;
 }
 
 .message-item.other .message-content {
@@ -858,6 +876,32 @@ body {
     margin-bottom: 14px;
 }
 
+.friend-remark-panel {
+    max-width: 420px;
+}
+
+.friend-remark-input-wrap {
+    margin-bottom: 14px;
+}
+
+.friend-remark-input {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    font-size: 14px;
+}
+
+.friend-remark-input:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.15);
+}
+
+.friend-remark-actions {
+    justify-content: flex-end;
+}
+
 .bubble-modal-actions {
     display: flex;
     gap: 10px;
@@ -995,6 +1039,52 @@ body {
     background: transparent;
 }
 
+/* ==================== 切换角色弹窗 ==================== */
+.role-switch-panel {
+    max-width: 560px;
+}
+
+.role-switch-preview-wrap {
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    background: #f8fafc;
+    padding: 12px;
+    margin-bottom: 14px;
+}
+
+.role-switch-preview-item {
+    margin: 0;
+}
+
+.role-switch-preview-item .message-body {
+    max-width: 100%;
+}
+
+.role-switch-action-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    margin-bottom: 14px;
+}
+
+.role-switch-action-grid .btn {
+    justify-content: center;
+}
+
+.role-switch-footer {
+    justify-content: flex-end;
+}
+
+.role-switch-confirm-panel,
+.role-switch-success-panel {
+    max-width: 360px;
+}
+
+.role-switch-confirm-actions,
+.role-switch-success-actions {
+    justify-content: center;
+}
+
 @keyframes slideUp {
     from {
         transform: translateY(100%);
@@ -1057,5 +1147,9 @@ body {
 
     .input-area {
         padding: 12px;
+    }
+
+    .role-switch-action-grid {
+        grid-template-columns: 1fr;
     }
 }

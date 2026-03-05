@@ -224,6 +224,16 @@ const API = {
     },
 
     /**
+     * 设置与某个好友的备注名
+     */
+    async setFriendRemark(friendName, remarkName) {
+        return this.request('POST', '/friend/set_remark', {
+            friend: friendName,
+            remark_name: remarkName,
+        });
+    },
+
+    /**
      * ==================== 聊天相关 ====================
      */
 
