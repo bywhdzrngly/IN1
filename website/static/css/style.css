@@ -604,6 +604,7 @@ body {
     background-color: var(--primary-color);
     color: white;
     border-bottom-right-radius: 2px;
+    text-align: left;
 }
 
 .message-item.other .message-content {
