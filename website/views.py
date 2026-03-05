@@ -511,11 +511,39 @@ def list_friends():
     friends = []
     for f in friendships:
         friend_user = f.user2 if f.user1_id == me.id else f.user1
+        remark_name = f.remark_by_user1 if f.user1_id == me.id else f.remark_by_user2
+
+        if me.id == friend_user.id:
+            conv_user1, conv_user2 = me.name, me.name
+        elif me.id < friend_user.id:
+            conv_user1, conv_user2 = me.name, friend_user.name
+        else:
+            conv_user1, conv_user2 = friend_user.name, me.name
+
+        conv = Conversation.query.filter_by(user1=conv_user1, user2=conv_user2).first()
+        last_msg_preview = ''
+        last_msg_timestamp = None
+        if conv:
+            last_msg = Message.query.filter_by(conversation_id=conv.id).order_by(
+                Message.timestamp.desc(),
+                Message.id.desc(),
+            ).first()
+            if last_msg:
+                content = (last_msg.content or '').strip()
+                if content.startswith('/uploads/'):
+                    last_msg_preview = '[图片]'
+                else:
+                    last_msg_preview = content
+                last_msg_timestamp = last_msg.timestamp.isoformat() if last_msg.timestamp else None
+
         friends.append({
             "id": friend_user.id,
             "name": friend_user.name,
             "email": friend_user.email,
             "image": friend_user.image,
+            "remark_name": remark_name,
+            "last_message_preview": last_msg_preview,
+            "last_message_timestamp": last_msg_timestamp,
         })
 
     return jsonify({"friends": friends})
@@ -799,6 +827,64 @@ def set_friend_bubble_text_color():
 
     _emit_friend_data_changed(current_user.name, target.name)
     return jsonify({"status": "ok", "text_color": normalized_color})
+
+
+@views.route('/friend/set_remark', methods=['POST'])
+@login_required
+def set_friend_remark():
+    data = request.get_json(silent=True) or {}
+    friend_param = data.get('friend')
+    if friend_param is None:
+        friend_param = request.form.get('friend')
+
+    remark_name = data.get('remark_name')
+    if remark_name is None:
+        remark_name = request.form.get('remark_name')
+    if remark_name is None:
+        remark_name = data.get('remark')
+    if remark_name is None:
+        remark_name = request.form.get('remark')
+
+    if not friend_param:
+        return jsonify({"error": "missing friend"}), 400
+    if remark_name is None:
+        return jsonify({"error": "missing remark_name"}), 400
+
+    normalized_remark = str(remark_name).strip()
+    if len(normalized_remark) > 80:
+        return jsonify({"error": "remark too long"}), 400
+
+    target = None
+    if str(friend_param).isdigit():
+        target = User.query.filter_by(id=int(friend_param)).first()
+    if not target:
+        target = User.query.filter_by(name=str(friend_param)).first()
+    if not target:
+        return jsonify({"error": "user not found"}), 404
+
+    user1_id = min(current_user.id, target.id)
+    user2_id = max(current_user.id, target.id)
+    friendship = Friendship.query.filter_by(user1_id=user1_id, user2_id=user2_id).first()
+    if not friendship:
+        return jsonify({"error": "not friends"}), 403
+
+    store_value = normalized_remark or None
+    if current_user.id == friendship.user1_id:
+        friendship.remark_by_user1 = store_value
+    else:
+        friendship.remark_by_user2 = store_value
+
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("set_friend_remark database error")
+        return jsonify({"error": "database error"}), 500
+
+    _emit_friend_data_changed(current_user.name, target.name)
+    return jsonify({"status": "ok", "remark_name": normalized_remark})
+
+
 @views.route('/users', methods=['GET'])
 @login_required
 def list_all_users():

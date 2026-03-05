@@ -4,6 +4,35 @@
  */
 
 const SocketManager = {
+    updateSelectedFriendLastMessagePreview(message) {
+        if (!message || !State.selectedFriendName) {
+            return;
+        }
+
+        const content = String((message && message.content) || '').trim();
+        const preview = content.startsWith('/uploads/') ? '[图片]' : content;
+        const timestamp = message.timestamp || null;
+        let changed = false;
+
+        State.setFriends(
+            (State.friends || []).map((friend) => {
+                if (String(friend.name) !== String(State.selectedFriendName)) {
+                    return friend;
+                }
+                changed = true;
+                return {
+                    ...friend,
+                    last_message_preview: preview,
+                    last_message_timestamp: timestamp,
+                };
+            })
+        );
+
+        if (changed && window.FriendsModule && typeof window.FriendsModule.renderFriendsList === 'function') {
+            window.FriendsModule.renderFriendsList();
+        }
+    },
+
     /**
      * 确保 socket 实例存在并尝试连接
      */
@@ -180,6 +209,7 @@ const SocketManager = {
 
         // 检查消息是否属于当前会话
         if (message.conversation_id === State.currentConversationId) {
+            this.updateSelectedFriendLastMessagePreview(message);
             const decorated = typeof window.decorateIncomingMessageForDisplay === 'function'
                 ? window.decorateIncomingMessageForDisplay(message, { isHistory: false })
                 : message;
@@ -196,6 +226,10 @@ const SocketManager = {
         console.log('收到历史消息:', data);
 
         if (data.conversation_id === State.currentConversationId) {
+            const history = data.messages || [];
+            if (history.length) {
+                this.updateSelectedFriendLastMessagePreview(history[history.length - 1]);
+            }
             const messages = (data.messages || []).map((message) =>
                 typeof window.decorateIncomingMessageForDisplay === 'function'
                     ? window.decorateIncomingMessageForDisplay(message, { isHistory: true })

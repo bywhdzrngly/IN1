@@ -97,6 +97,8 @@ class Friendship(db.Model):
     bubble2 = db.Column(db.String(256), nullable=True)  # user2 气泡
     bubble_text_color1 = db.Column(db.String(16), nullable=True)  # user1 文字颜色
     bubble_text_color2 = db.Column(db.String(16), nullable=True)  # user2 文字颜色
+    remark_by_user1 = db.Column(db.String(80), nullable=True)  # user1 给对方设置的备注名
+    remark_by_user2 = db.Column(db.String(80), nullable=True)  # user2 给对方设置的备注名
 
 
     # 关联 User 对象，便于获取用户名等信息
@@ -120,6 +122,8 @@ class Friendship(db.Model):
 
             "bubble_text_color1": self.bubble_text_color1,
             "bubble_text_color2": self.bubble_text_color2,
+            "remark_by_user1": self.remark_by_user1,
+            "remark_by_user2": self.remark_by_user2,
         }
 
 
@@ -136,6 +140,10 @@ def _ensure_friendship_columns():
         alter_sql.append("ALTER TABLE friendship ADD COLUMN bubble_text_color1 VARCHAR(16)")
     if 'bubble_text_color2' not in existing_columns:
         alter_sql.append("ALTER TABLE friendship ADD COLUMN bubble_text_color2 VARCHAR(16)")
+    if 'remark_by_user1' not in existing_columns:
+        alter_sql.append("ALTER TABLE friendship ADD COLUMN remark_by_user1 VARCHAR(80)")
+    if 'remark_by_user2' not in existing_columns:
+        alter_sql.append("ALTER TABLE friendship ADD COLUMN remark_by_user2 VARCHAR(80)")
 
     if not alter_sql:
         return

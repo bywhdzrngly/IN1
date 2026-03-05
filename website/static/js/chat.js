@@ -79,6 +79,15 @@ const RoleSwitchEditor = {
     draft: null,
 };
 
+const FriendRemarkEditor = {
+    initialized: false,
+    modal: null,
+    accountEl: null,
+    inputEl: null,
+    cancelBtn: null,
+    confirmBtn: null,
+};
+
 function normalizeSelfSendSide(side) {
     return side === 'left' ? 'left' : 'right';
 }
@@ -207,6 +216,201 @@ function isSelfConversationSelected() {
         return false;
     }
     return String(selectedFriendName) === String(meName);
+}
+
+function getFriendByName(friendName) {
+    if (!friendName) return null;
+    return (State.friends || []).find((friend) => String(friend.name) === String(friendName)) || null;
+}
+
+function formatDisplayNameWithOriginalHtml(displayName, originalName, withOriginalName) {
+    const primary = escapeHtml(displayName || '');
+    if (!withOriginalName || !originalName) {
+        return primary;
+    }
+    const original = escapeHtml(originalName);
+    return `${primary}<span class="remark-origin-name">（${original}）</span>`;
+}
+
+function getFriendDisplayMeta(friendName) {
+    const friend = getFriendByName(friendName);
+    const originalName = friend && friend.name ? String(friend.name) : String(friendName || '');
+    const remarkName = friend && typeof friend.remark_name === 'string'
+        ? friend.remark_name.trim()
+        : '';
+    const hasRemark = !!remarkName;
+
+    return {
+        displayName: hasRemark ? remarkName : originalName,
+        originalName,
+        hasRemark,
+    };
+}
+
+function getFriendDisplayName(friendName) {
+    return getFriendDisplayMeta(friendName).displayName;
+}
+
+function getFriendDisplayNameHtml(friendName) {
+    const meta = getFriendDisplayMeta(friendName);
+    return formatDisplayNameWithOriginalHtml(meta.displayName, meta.originalName, meta.hasRemark);
+}
+
+function getSenderDisplayMeta(sender) {
+    const senderValue = String(sender || '');
+    const currentUser = State.currentUser || {};
+    const myName = currentUser.name ? String(currentUser.name) : '';
+    const myId = currentUser.id !== null && currentUser.id !== undefined ? String(currentUser.id) : '';
+
+    if ((myName && senderValue === myName) || (myId && senderValue === myId)) {
+        return {
+            displayName: myName || senderValue,
+            originalName: myName || senderValue,
+            hasRemark: false,
+        };
+    }
+
+    const matchedFriend = (State.friends || []).find((friend) =>
+        String(friend.name) === senderValue || String(friend.id) === senderValue
+    );
+    if (!matchedFriend) {
+        return {
+            displayName: senderValue,
+            originalName: senderValue,
+            hasRemark: false,
+        };
+    }
+
+    const remarkName = typeof matchedFriend.remark_name === 'string'
+        ? matchedFriend.remark_name.trim()
+        : '';
+    const originalName = matchedFriend.name || senderValue;
+    const hasRemark = !!remarkName;
+
+    return {
+        displayName: hasRemark ? remarkName : originalName,
+        originalName,
+        hasRemark,
+    };
+}
+
+function getDisplayNameForSender(sender) {
+    return getSenderDisplayMeta(sender).displayName;
+}
+
+function getDisplayNameHtmlForSender(sender) {
+    const meta = getSenderDisplayMeta(sender);
+    return formatDisplayNameWithOriginalHtml(meta.displayName, meta.originalName, meta.hasRemark);
+}
+
+function closeFriendRemarkModal() {
+    if (!FriendRemarkEditor.modal) return;
+    FriendRemarkEditor.modal.classList.add('hidden');
+}
+
+async function submitFriendRemark() {
+    const friendName = State.selectedFriendName;
+    if (!friendName || !FriendRemarkEditor.inputEl) {
+        return;
+    }
+
+    const currentUserName = State.currentUser && State.currentUser.name;
+    if (currentUserName && String(friendName) === String(currentUserName)) {
+        showErrorToast('不能给自己设置备注名');
+        return;
+    }
+
+    const remarkName = String(FriendRemarkEditor.inputEl.value || '').trim();
+
+    try {
+        const result = await API.setFriendRemark(friendName, remarkName);
+        const finalRemarkName = typeof (result && result.remark_name) === 'string'
+            ? result.remark_name.trim()
+            : remarkName;
+
+        State.setFriends(
+            (State.friends || []).map((friend) =>
+                String(friend.name) === String(friendName)
+                    ? { ...friend, remark_name: finalRemarkName }
+                    : friend
+            )
+        );
+
+        if (window.FriendsModule && typeof window.FriendsModule.renderFriendsList === 'function') {
+            window.FriendsModule.renderFriendsList();
+        }
+        if (window.ChatModule && typeof window.ChatModule.renderChatHeader === 'function') {
+            window.ChatModule.renderChatHeader(friendName);
+        }
+
+        closeFriendRemarkModal();
+        showErrorToast('备注名设置成功');
+    } catch (error) {
+        showErrorToast('设置备注名失败: ' + error.message);
+    }
+}
+
+function openFriendRemarkModal() {
+    initFriendRemarkEditorUI();
+    if (!FriendRemarkEditor.modal) return;
+
+    const friendName = State.selectedFriendName;
+    if (!friendName) return;
+
+    const currentUserName = State.currentUser && State.currentUser.name;
+    if (currentUserName && String(friendName) === String(currentUserName)) {
+        showErrorToast('不能给自己设置备注名');
+        return;
+    }
+
+    const friend = getFriendByName(friendName);
+    const remarkName = friend && typeof friend.remark_name === 'string'
+        ? friend.remark_name
+        : '';
+
+    if (FriendRemarkEditor.accountEl) {
+        FriendRemarkEditor.accountEl.textContent = `账号：${friendName}`;
+    }
+    if (FriendRemarkEditor.inputEl) {
+        FriendRemarkEditor.inputEl.value = remarkName;
+        FriendRemarkEditor.inputEl.focus();
+        FriendRemarkEditor.inputEl.select();
+    }
+
+    FriendRemarkEditor.modal.classList.remove('hidden');
+}
+
+function initFriendRemarkEditorUI() {
+    if (FriendRemarkEditor.initialized) return;
+
+    FriendRemarkEditor.modal = document.getElementById('friend-remark-modal');
+    FriendRemarkEditor.accountEl = document.getElementById('friend-remark-account');
+    FriendRemarkEditor.inputEl = document.getElementById('friend-remark-input');
+    FriendRemarkEditor.cancelBtn = document.getElementById('friend-remark-cancel-btn');
+    FriendRemarkEditor.confirmBtn = document.getElementById('friend-remark-confirm-btn');
+
+    if (FriendRemarkEditor.cancelBtn) {
+        FriendRemarkEditor.cancelBtn.addEventListener('click', () => {
+            closeFriendRemarkModal();
+        });
+    }
+
+    if (FriendRemarkEditor.confirmBtn) {
+        FriendRemarkEditor.confirmBtn.addEventListener('click', () => {
+            submitFriendRemark();
+        });
+    }
+
+    if (FriendRemarkEditor.inputEl) {
+        FriendRemarkEditor.inputEl.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                submitFriendRemark();
+            }
+        });
+    }
+
+    FriendRemarkEditor.initialized = true;
 }
 
 function updateSwitchRoleButtonUI() {
@@ -533,6 +737,7 @@ const ChatModule = {
     async selectFriend(friendName) {
         if (!friendName) return;
 
+        closeFriendRemarkModal();
         State.setSelectedFriend(friendName);
         ensureSelfChatRoleState();
         State.selfChatPendingSendSides = [];
@@ -588,7 +793,12 @@ const ChatModule = {
 
         const friend = State.friends.find(f => f.name === friendName);
 
-        nameEl.textContent = friendName;
+        const meta = getFriendDisplayMeta(friendName);
+        nameEl.innerHTML = getFriendDisplayNameHtml(friendName);
+        nameEl.classList.add('clickable');
+        nameEl.title = meta.hasRemark
+            ? `账号：${friendName}（点击修改备注名）`
+            : '点击修改备注名';
         const convId = (typeof State !== 'undefined' && State.currentConversationId) ? State.currentConversationId : null;
         const avatarUrl = friend ? ChatModule.getAvatarForUserId(friend.id, convId) : DEFAULT_AVATAR_DATA_URI;
         avatarEl.src = avatarUrl;
@@ -612,6 +822,7 @@ const ChatModule = {
         }
         closeRoleSwitchEditorModal();
         closeRoleSwitchSuccessModal();
+        closeFriendRemarkModal();
 
         const container = document.getElementById('messages-container');
         container.innerHTML = '<div class="empty-state">选择好友开始聊天</div>';
@@ -674,9 +885,11 @@ const ChatModule = {
         const imageBtn = document.getElementById('image-btn');
         const imageInput = document.getElementById('image-input');
         const switchRoleBtn = document.getElementById('switch-role-btn');
+        const friendNameEl = document.getElementById('chat-friend-name');
 
         ensureSelfChatRoleState();
         initRoleSwitchEditorUI();
+        initFriendRemarkEditorUI();
         updateSwitchRoleButtonUI();
 
         sendBtn.addEventListener('click', () => this.handleSendMessage());
@@ -690,6 +903,9 @@ const ChatModule = {
 
         imageBtn.addEventListener('click', () => imageInput.click());
         imageInput.addEventListener('change', (event) => this.handleSendImage(event));
+        if (friendNameEl) {
+            friendNameEl.addEventListener('click', () => openFriendRemarkModal());
+        }
         if (switchRoleBtn) {
             switchRoleBtn.addEventListener('click', () => handleSwitchRoleButtonClick());
         }
@@ -838,11 +1054,12 @@ function renderMessages() {
                 ? (normalizeHexColor(selfLeftAppearance.textColor) || SELF_CHAT_LEFT_ROLE_DEFAULT_TEXT_COLOR)
                 : getBubbleTextColorForSender(msg.sender));
 
-        const senderDisplay = escapeHtml(
+        const senderDisplay = (
             isLeftRoleMessage
                 ? (selfLeftAppearance.name || (State.currentUser && State.currentUser.name) || msg.sender || '')
-                : (msg.sender || '')
+                : getDisplayNameHtmlForSender(msg.sender)
         );
+        const senderDisplayHtml = isLeftRoleMessage ? escapeHtml(senderDisplay) : senderDisplay;
 
         const contentHtml = isImage
             ? `<img src="${msg.content}" alt="图片消息" class="message-image">`
@@ -858,7 +1075,7 @@ function renderMessages() {
             <div class="message-item ${mine ? 'mine' : 'other'}">
                 <img class="message-avatar" src="${avatarUrl}" alt="avatar" />
                 <div class="message-body">
-                    <div class="message-meta">${senderDisplay}</div>
+                    <div class="message-meta">${senderDisplayHtml}</div>
                     <div class="${bubbleClass}"${bubbleStyle}>${contentHtml}</div>
                 </div>
             </div>

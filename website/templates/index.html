@@ -208,6 +208,27 @@
         <!-- 全局错误提示 -->
         <div id="error-toast" class="error-toast hidden"></div>
 
+        <!-- 好友备注名弹窗 -->
+        <div id="friend-remark-modal" class="bubble-modal hidden">
+            <div class="bubble-modal-panel friend-remark-panel">
+                <h3>修改备注名</h3>
+                <p id="friend-remark-account" class="bubble-modal-tip"></p>
+                <div class="friend-remark-input-wrap">
+                    <input
+                        id="friend-remark-input"
+                        class="friend-remark-input"
+                        type="text"
+                        maxlength="80"
+                        placeholder="请输入备注名（留空表示清除备注）"
+                    >
+                </div>
+                <div class="bubble-modal-actions friend-remark-actions">
+                    <button id="friend-remark-cancel-btn" type="button" class="btn">取消</button>
+                    <button id="friend-remark-confirm-btn" type="button" class="btn btn-primary">完成</button>
+                </div>
+            </div>
+        </div>
+
         <!-- 专属气泡：选择上传方式 -->
         <div id="bubble-action-modal" class="bubble-modal hidden">
             <div class="bubble-modal-panel">

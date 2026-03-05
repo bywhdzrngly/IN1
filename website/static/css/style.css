@@ -428,10 +428,18 @@ body {
     text-overflow: ellipsis;
 }
 
+.remark-origin-name {
+    color: #5f6368;
+    font-weight: 400;
+}
+
 .friend-time {
     font-size: 12px;
     color: var(--text-muted);
     margin-top: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .request-item {
@@ -521,6 +529,15 @@ body {
     font-size: 16px;
     font-weight: 600;
     color: var(--text-dark);
+}
+
+.chat-friend-name.clickable {
+    cursor: pointer;
+}
+
+.chat-friend-name.clickable:hover {
+    color: var(--primary-color);
+    text-decoration: underline;
 }
 
 .chat-status {
@@ -857,6 +874,32 @@ body {
     font-size: 13px;
     color: var(--text-muted);
     margin-bottom: 14px;
+}
+
+.friend-remark-panel {
+    max-width: 420px;
+}
+
+.friend-remark-input-wrap {
+    margin-bottom: 14px;
+}
+
+.friend-remark-input {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    font-size: 14px;
+}
+
+.friend-remark-input:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.15);
+}
+
+.friend-remark-actions {
+    justify-content: flex-end;
 }
 
 .bubble-modal-actions {
