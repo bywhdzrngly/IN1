@@ -110,7 +110,7 @@ python main.py
 4. Open in browser
 
 ```
-http://localhost:5000
+http://localhost:5001
 ```
 
 ### Access from other devices (same WiFi)
@@ -124,13 +124,13 @@ Steps:
 3. Other devices on the same WiFi can open the site using:
 
 ```
-http://YOUR_LOCAL_IP:5000
+http://YOUR_LOCAL_IP:5001
 ```
 
 Example:
 
 ```
-http://192.168.1.12:5000
+http://192.168.1.12:5001
 ```
 
 This allows friends in the **same network (same router / same WiFi)** to join the chat and communicate with each other in real time.
