@@ -195,15 +195,36 @@ IN1/
 
 # 📸 Screenshots
 
-Add screenshots here to showcase the UI.
+## Landing Page
 
-```
-![login](screenshots/login.png)
+![landing-login](screenshots/1login.png)
 
-![chat](screenshots/chat.png)
+## Sign Up Page
 
-![bubble](screenshots/bubble.png)
-```
+![sign-up](screenshots/2sign_up.png)
+
+## Main Page
+
+![main-page](screenshots/3main_page.png)
+
+## Search User
+
+![search-user](screenshots/4search_user.png)
+
+## Bubble Customization
+
+![bubble-drawing](screenshots/7bubble_drawing.png)
+![color-picking](screenshots/8colour_picking.png)
+
+## Roleplay / Self-Chat
+
+![role-setting](screenshots/15roleplaying_setting.png)
+![role-showcase](screenshots/17role_playing_showcase.png)
+
+## Feature Showcase
+
+![feature-showcase](screenshots/12feature_showcase.png)
+![change-username](screenshots/18change_username.png)
 
 ---
 
