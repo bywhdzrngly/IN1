@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>聊天应用</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div id="app">
+        <!-- 登录/注册页面 -->
+        <div id="auth-page" class="page hidden">
+            <div class="auth-container">
+                <div class="auth-card">
+                    <h1>聊天应用</h1>
+                    
+                    <!-- 登录表单 -->
+                    <form id="login-form" class="auth-form active">
+                        <h2>登录</h2>
+                        <div class="form-group">
+                            <label>用户名</label>
+                            <input type="text" id="login-name" placeholder="输入用户名" required>
+                        </div>
+                        <div class="form-group">
+                            <label>密码</label>
+                            <input type="password" id="login-password" placeholder="输入密码" required>
+                        </div>
+                        <div class="form-group checkbox">
+                            <input type="checkbox" id="login-remember">
+                            <label for="login-remember">记住我</label>
+                        </div>
+                        <button type="submit" class="btn btn-primary">登录</button>
+                        <p class="form-switch">没有账号？<a href="#" onclick="switchAuthForm(event)">去注册</a></p>
+                    </form>
+                    
+                    <!-- 注册表单 -->
+                    <form id="signup-form" class="auth-form">
+                        <h2>注册</h2>
+                        <div class="form-group">
+                            <label>用户名</label>
+                            <input type="text" id="signup-name" placeholder="输入用户名" required>
+                        </div>
+                        <div class="form-group">
+                            <label>邮箱</label>
+                            <input type="email" id="signup-email" placeholder="输入邮箱" required>
+                        </div>
+                        <div class="form-group">
+                            <label>密码</label>
+                            <input type="password" id="signup-password" placeholder="输入密码" required>
+                        </div>
+                        <div class="form-group">
+                            <label>头像（可选）</label>
+                            <input type="file" id="signup-image" accept="image/*">
+                            <small>支持 jpg、png 等常见格式</small>
+                        </div>
+                        <div id="signup-error" class="error-message"></div>
+                        <button type="submit" class="btn btn-primary">注册</button>
+                        <p class="form-switch">已有账号？<a href="#" onclick="switchAuthForm(event)">去登录</a></p>
+                    </form>
+                    
+                    <div id="auth-error" class="error-message"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 主聊天页面 -->
+        <div id="main-page" class="page hidden">
+            <div class="main-container">
+                <!-- 左侧栏：用户信息 + 好友列表 -->
+                <div class="sidebar">
+                    <!-- 用户信息栏 -->
+                    <div class="user-info">
+                        <!-- 全局头像，点击更换 -->
+                        <img id="user-avatar" src="{{ current_user.image if current_user and current_user.image else 'data:image/svg+xml,%3Csvg%20xmlns%3D%22http://www.w3.org/2000/svg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22currentColor%22%3E%3Ccircle%20cx%3D%2212%22%20cy%3D%2212%22%20r%3D%2210%22/%3E%3Cpath%20d%3D%22M12%2012c2.21%200%204-1.79%204-4s-1.79-4-4-4-4%201.79-4%204%201.79%204%204%204zm0%202c-2.67%200-8%201.34-8%204v2h16v-2c0-2.66-5.33-4-8-4z%22/%3E%3C/svg%3E' }}" alt="头像" class="avatar">
+                        <input type="file" id="global-avatar-input" accept="image/*" style="display:none">
+                        <div class="user-details">
+                            <div id="user-name" class="username"></div>
+                            <div id="user-email" class="email"></div>
+                        </div>
+                        <button id="logout-btn" class="btn-logout" title="登出">⏻</button>
+                    </div>
+
+                    <!-- 搜索框 -->
+                    <div class="search-box">
+                        <input 
+                            type="text" 
+                            id="search-input" 
+                            placeholder="搜索用户..."
+                            class="search-input"
+                        >
+                    </div>
+
+                    <!-- 标签切换 -->
+                    <div class="tabs">
+                        <button class="tab-btn active" data-tab="friends">好友</button>
+                        <button class="tab-btn" data-tab="requests">
+                            申请
+                            <span id="request-badge" class="badge hidden">0</span>
+                        </button>
+                        <button class="tab-btn" data-tab="search">搜索</button>
+                    </div>
+
+                    <!-- 好友列表 -->
+                    <div id="friends-tab" class="tab-content active">
+                        <div id="friends-list" class="friends-list">
+                            <div class="empty-state">暂无好友</div>
+                        </div>
+                    </div>
+
+                    <!-- 待审核申请 -->
+                    <div id="requests-tab" class="tab-content">
+                        <div id="requests-list" class="requests-list">
+                            <div class="empty-state">暂无待审核申请</div>
+                        </div>
+                    </div>
+
+                    <!-- 搜索结果 -->
+                    <div id="search-tab" class="tab-content">
+                        <div id="search-results" class="search-results">
+                            <div class="empty-state">输入用户名搜索</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 右侧：聊天区 -->
+                <div class="chat-area">
+                    <!-- 聊天头部 -->
+                    <div id="chat-header" class="chat-header hidden">
+                        <div class="chat-header-info">
+                            <img id="chat-friend-avatar" src="" alt="头像" class="avatar-small">
+                            <div>
+                                <div id="chat-friend-name" class="chat-friend-name"></div>
+                                <div id="chat-status" class="chat-status">离线</div>
+                            </div>
+                        </div>
+                        <form id="specialAvatarForm" onsubmit="return false;">
+                            <input
+                                type="file"
+                                id="specialAvatarInput"
+                                style="display:none"
+                                onchange="uploadSpecialAvatar()"
+                            >
+
+                            <button type="button" onclick="chooseSpecialAvatar()">
+                                设置专属头像
+                            </button>
+                        </form>
+                        <form id="specialBubbleForm" onsubmit="return false;">
+                            <input
+                                type="file"
+                                id="specialBubbleInput"
+                                accept="image/*"
+                                style="display:none"
+                                onchange="uploadSpecialBubble()"
+                            >
+
+                            <button type="button" onclick="chooseSpecialBubble()">
+                                设置专属气泡
+                            </button>
+                        </form>
+                        <form id="specialTextColorForm" onsubmit="return false;">
+                            <button type="button" onclick="chooseSpecialTextColor()">
+                                设置专属文字颜色
+                            </button>
+                        </form>
+                        <button id="switch-role-btn" type="button" class="hidden">切换角色</button>
+                        <button id="delete-friend-btn" class="btn btn-danger btn-small">删除好友</button>
+                    </div>
+
+                    <!-- 消息列表 -->
+                    <div id="messages-container" class="messages-container">
+                        <div class="empty-state">选择好友开始聊天</div>
+                    </div>
+
+                    <!-- 输入区 -->
+                    <div id="input-area" class="input-area hidden">
+                        <div class="input-toolbar">
+                            <button id="image-btn" class="btn-icon" title="发送图片">
+                                <span>🖼️</span>
+                            </button>
+                            <input type="file" id="image-input" accept="image/*" style="display: none;">
+                        </div>
+                        <div class="input-group">
+                            <textarea 
+                                id="message-input" 
+                                class="message-input" 
+                                placeholder="输入消息... (Enter 发送, Shift+Enter 换行)"
+                                rows="3"
+                            ></textarea>
+                            <button id="send-btn" class="btn btn-primary">发送</button>
+                        </div>
+                        <div id="upload-progress" class="upload-progress hidden">
+                            <div class="progress-bar">
+                                <div class="progress-fill"></div>
+                            </div>
+                            <span>上传中...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 全局加载指示器 -->
+        <div id="loading-indicator" class="loading-indicator hidden">
+            <div class="spinner"></div>
+        </div>
+
+        <!-- 全局错误提示 -->
+        <div id="error-toast" class="error-toast hidden"></div>
+
+        <!-- 好友备注名弹窗 -->
+        <div id="friend-remark-modal" class="bubble-modal hidden">
+            <div class="bubble-modal-panel friend-remark-panel">
+                <h3>修改备注名</h3>
+                <p id="friend-remark-account" class="bubble-modal-tip"></p>
+                <div class="friend-remark-input-wrap">
+                    <input
+                        id="friend-remark-input"
+                        class="friend-remark-input"
+                        type="text"
+                        maxlength="80"
+                        placeholder="请输入备注名（留空表示清除备注）"
+                    >
+                </div>
+                <div class="bubble-modal-actions friend-remark-actions">
+                    <button id="friend-remark-cancel-btn" type="button" class="btn">取消</button>
+                    <button id="friend-remark-confirm-btn" type="button" class="btn btn-primary">完成</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 专属气泡：选择上传方式 -->
+        <div id="bubble-action-modal" class="bubble-modal hidden">
+            <div class="bubble-modal-panel">
+                <h3>设置专属气泡</h3>
+                <p class="bubble-modal-tip">请选择上传已有图片，或先绘制再上传。</p>
+                <div class="bubble-modal-actions">
+                    <button id="bubble-upload-existing-btn" class="btn btn-primary">上传已有图片</button>
+                    <button id="bubble-draw-new-btn" class="btn">绘制图片</button>
+                </div>
+                <div class="bubble-modal-footer">
+                    <button id="bubble-action-cancel-btn" class="btn">取消</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 专属气泡：绘制窗口 -->
+        <div id="bubble-draw-modal" class="bubble-modal hidden">
+            <div class="bubble-modal-panel bubble-draw-panel">
+                <div class="bubble-draw-header">
+                    <h3>绘制专属气泡</h3>
+                    <p class="bubble-modal-tip">虚线是九宫格拉伸参考线，不会导出到图片。</p>
+                </div>
+
+                <div class="bubble-draw-toolbar">
+                    <label class="bubble-color-control">
+                        背景色
+                        <input type="color" id="bubble-bg-color" value="#ffffff">
+                    </label>
+                    <label class="bubble-color-control">
+                        线条色
+                        <input type="color" id="bubble-line-color" value="#1f2937">
+                    </label>
+                    <div class="bubble-fill-tool">
+                        <label id="bubble-fill-btn" class="btn btn-small" for="bubble-fill-color">填色工具</label>
+                        <input
+                            type="color"
+                            id="bubble-fill-color"
+                            class="bubble-fill-color-proxy"
+                            value="#22c55e"
+                            aria-label="填充颜色"
+                        >
+                    </div>
+                    <button id="bubble-undo-btn" class="btn btn-small">撤回上一步</button>
+                    <button id="bubble-clear-btn" class="btn btn-small">清除画布</button>
+                </div>
+
+                <div class="bubble-canvas-wrap">
+                    <canvas id="bubble-draw-canvas" width="360" height="240"></canvas>
+                </div>
+
+                <div class="bubble-modal-actions">
+                    <button id="bubble-draw-cancel-btn" class="btn">取消</button>
+                    <button id="bubble-draw-done-btn" class="btn btn-primary">完成</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 专属气泡：导出方式 -->
+        <div id="bubble-export-modal" class="bubble-modal hidden">
+            <div class="bubble-modal-panel">
+                <h3>导出并上传</h3>
+                <p class="bubble-modal-tip">选择导出方式后将自动上传为当前好友的专属气泡。</p>
+                <div class="bubble-modal-actions">
+                    <button id="bubble-upload-save-local-btn" class="btn btn-primary">上传并保存本地</button>
+                    <button id="bubble-upload-only-btn" class="btn">仅上传</button>
+                </div>
+                <div class="bubble-modal-footer">
+                    <button id="bubble-export-back-btn" class="btn">返回绘制</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 专属文字颜色 -->
+        <div id="bubble-text-color-modal" class="bubble-modal hidden">
+            <div class="bubble-modal-panel">
+                <h3>设置专属文字颜色</h3>
+                <p class="bubble-modal-tip">选择颜色后点击完成，取消则不保存。</p>
+                <div class="bubble-text-color-row">
+                    <input type="color" id="bubble-text-color-input" value="#111827">
+                    <span id="bubble-text-color-preview" class="bubble-text-color-preview">示例文字</span>
+                </div>
+                <div class="bubble-modal-actions">
+                    <button id="bubble-text-color-confirm-btn" class="btn btn-primary">完成</button>
+                    <button id="bubble-text-color-cancel-btn" class="btn">取消</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 切换角色：编辑左侧角色 -->
+        <div id="role-switch-modal" class="bubble-modal hidden">
+            <div class="bubble-modal-panel role-switch-panel">
+                <h3>选择你的角色</h3>
+                <p class="bubble-modal-tip">以下修改仅对和自己聊天时左侧消息生效。</p>
+
+                <div class="role-switch-preview-wrap">
+                    <div class="message-item other role-switch-preview-item">
+                        <img id="role-switch-preview-avatar" class="message-avatar" src="" alt="avatar">
+                        <div class="message-body">
+                            <div id="role-switch-preview-name" class="message-meta"></div>
+                            <div id="role-switch-preview-content" class="message-content">左侧示例消息</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="role-switch-action-grid">
+                    <button id="role-switch-change-avatar-btn" type="button" class="btn">修改头像</button>
+                    <button id="role-switch-change-name-btn" type="button" class="btn">修改账号名</button>
+                    <button id="role-switch-change-bubble-btn" type="button" class="btn">修改气泡</button>
+                    <button id="role-switch-change-text-color-btn" type="button" class="btn">修改文字颜色</button>
+                </div>
+
+                <div class="bubble-modal-actions role-switch-footer">
+                    <button id="role-switch-cancel-btn" type="button" class="btn">取消</button>
+                    <button id="role-switch-complete-btn" type="button" class="btn btn-primary">完成</button>
+                </div>
+
+                <input type="file" id="role-switch-avatar-input" accept="image/*" style="display:none">
+            </div>
+        </div>
+
+        <!-- 切换角色：取消确认 -->
+        <div id="role-switch-cancel-confirm-modal" class="bubble-modal hidden">
+            <div class="bubble-modal-panel role-switch-confirm-panel">
+                <h3>提示</h3>
+                <p class="bubble-modal-tip">当前修改将不会被保留，是否仍要退出？</p>
+                <div class="bubble-modal-actions role-switch-confirm-actions">
+                    <button id="role-switch-cancel-yes-btn" type="button" class="btn btn-danger">是</button>
+                    <button id="role-switch-cancel-no-btn" type="button" class="btn btn-primary">否</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 切换角色：成功提示 -->
+        <div id="role-switch-success-modal" class="bubble-modal hidden">
+            <div class="bubble-modal-panel role-switch-success-panel">
+                <h3>切换角色成功</h3>
+                <div class="bubble-modal-actions role-switch-success-actions">
+                    <button id="role-switch-success-confirm-btn" type="button" class="btn btn-primary">确认</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 引入依赖 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/2.3.0/socket.io.js"></script>
+    
+    <!-- 引入应用脚本 -->
+    <script src="{{ url_for('static', filename='js/state.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/api.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/chat.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/socket.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/auth.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/friend.js') }}"></script>
+
+</body>
+</html>
